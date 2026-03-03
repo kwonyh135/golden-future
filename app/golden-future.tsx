@@ -954,14 +954,7 @@ export default function GoldenFuture() {
         ["us", "🇺🇸 해외주식"],
         ["crypto", "🪙 암호화폐"],
         ["insights", "리포트"],
-      ]
-    : [
-        ["dashboard", "통합 ��시보드"],
-        ["kr", "🇰🇷 국내주식"],
-        ["us", "🇺🇸 해외주식"],
-        ["crypto", "🪙 암호화폐"],
-        ["insights", "리포트"],
-      ]
+      ];
 
   // Total realized PnL from sold history
   const totalRealizedPnl = soldHistory.reduce((s, a) => {
