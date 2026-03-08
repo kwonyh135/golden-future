@@ -61,3 +61,10 @@ anon role에 select/insert/update/delete 정책을 추가하세요.
 - `main` 푸시 시 `production` environment 사용
 - `develop` 푸시 시 `development` environment 사용
 - `workflow_dispatch` 실행 시 환경 선택 가능
+
+
+## 패키지 매니저
+이 프로젝트는 **npm 기반**으로 관리합니다.
+- 의존성 설치: `npm install`
+- 개발 서버: `npm run dev`
+- 빌드: `npm run build`
