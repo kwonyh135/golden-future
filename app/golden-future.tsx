@@ -912,10 +912,10 @@ export default function GoldenFuture() {
   const [selectedUser, setSelectedUser] = useState<"전체" | "용" | "령">("전체")
   const [showAdd, setShowAdd] = useState(null)
   const [sellTarget, setSellTarget] = useState(null) // asset being sold
-  const [assets, setAssets] = useState(INITIAL_ASSETS)
+  const [assets, setAssets] = useState(hasSupabaseConfig ? [] : INITIAL_ASSETS)
 
   // Sold assets history
-  const [soldHistory, setSoldHistory] = useState(INITIAL_SOLD_HISTORY)
+  const [soldHistory, setSoldHistory] = useState(hasSupabaseConfig ? [] : INITIAL_SOLD_HISTORY)
   const [syncStatus, setSyncStatus] = useState(hasSupabaseConfig ? "Supabase 동기화 대기" : "Supabase 환경변수 미설정 (로컬 모드)")
   const [saveLogs, setSaveLogs] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
@@ -950,7 +950,7 @@ export default function GoldenFuture() {
           pushSaveLog("Supabase 데이터 일치 확인 완료")
         }
 
-        if (remoteAssets.length > 0) setAssets(remoteAssets)
+        setAssets(remoteAssets)
         setSoldHistory(remoteSoldHistory)
       } catch (error) {
         console.error(error)
