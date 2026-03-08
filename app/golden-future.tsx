@@ -882,6 +882,13 @@ export default function GoldenFuture() {
   // Sold assets history
   const [soldHistory, setSoldHistory] = useState([])
   const [syncStatus, setSyncStatus] = useState(hasSupabaseConfig ? "Supabase 동기화 대기" : "Supabase 환경변수 미설정 (로컬 모드)")
+  const [saveLogs, setSaveLogs] = useState<string[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+
+  const pushSaveLog = (msg) => {
+    const t = new Date().toLocaleTimeString("ko-KR", { hour12: false })
+    setSaveLogs((prev) => [`${t} · ${msg}`, ...prev].slice(0, 5))
+  }
 
   useEffect(() => {
     if (!hasSupabaseConfig) return
@@ -894,9 +901,11 @@ export default function GoldenFuture() {
         if (Array.isArray(assetRows) && assetRows.length > 0) setAssets(assetRows.map(fromAssetRow))
         if (Array.isArray(soldRows)) setSoldHistory(soldRows.map(fromSoldRow))
         setSyncStatus("Supabase 동기화 완료")
+        pushSaveLog("Supabase 데이터 로딩 성공")
       } catch (error) {
         console.error(error)
         setSyncStatus("Supabase 동기화 실패 (로컬 데이터 사용)")
+        pushSaveLog("Supabase 로딩 실패, 로컬 데이터 사용")
       }
     }
 
@@ -967,6 +976,39 @@ export default function GoldenFuture() {
     }
     return d
   }, [grandTotal])
+
+  const handleSaveToSupabase = async () => {
+    if (!hasSupabaseConfig) {
+      setSyncStatus("Supabase 환경변수 미설정 (로컬 모드)")
+      pushSaveLog("저장 실패: Supabase 환경변수 미설정")
+      return
+    }
+
+    setIsSaving(true)
+    setSyncStatus("Supabase 저장 중...")
+    pushSaveLog("수동 저장 시작")
+
+    try {
+      await supabaseRequest("golden_assets", { method: "DELETE", query: "id=gt.0" })
+      await supabaseRequest("golden_sold_history", { method: "DELETE", query: "id=gt.0" })
+
+      if (assets.length > 0) {
+        await supabaseRequest("golden_assets", { method: "POST", body: assets.map(toAssetRow) })
+      }
+      if (soldHistory.length > 0) {
+        await supabaseRequest("golden_sold_history", { method: "POST", body: soldHistory.map(toSoldRow) })
+      }
+
+      setSyncStatus("Supabase 저장 완료")
+      pushSaveLog(`저장 완료: 자산 ${assets.length}건, 매도이력 ${soldHistory.length}건`)
+    } catch (error) {
+      console.error(error)
+      setSyncStatus("Supabase 저장 실패")
+      pushSaveLog("저장 실패: RLS/테이블/키 설정 확인 필요")
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   const handleSell = async (soldAsset) => {
     const assetIdx = assets.findIndex(
@@ -1156,6 +1198,19 @@ export default function GoldenFuture() {
 
       {/* User Selection Buttons */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 20 }}>
+        <button
+          onClick={handleSaveToSupabase}
+          disabled={isSaving}
+          style={{
+            ...(isSaving ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: S.accent }),
+            padding: "8px 14px",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: isSaving ? "wait" : "pointer",
+          }}
+        >
+          {isSaving ? "저장 중..." : "💾 저장"}
+        </button>
         {["전체", "용", "령"].map((user) => (
           <button
             key={user}
@@ -1557,6 +1612,24 @@ export default function GoldenFuture() {
           onConfirm={handleSell}
           onClose={() => setSellTarget(null)}
         />
+      )}
+
+      {saveLogs.length > 0 && (
+        <div style={{
+          position: "fixed",
+          right: 16,
+          bottom: 16,
+          zIndex: 1100,
+          width: "min(360px, calc(100vw - 32px))",
+          display: "grid",
+          gap: 8,
+        }}>
+          {saveLogs.map((log, idx) => (
+            <div key={idx} style={{ ...S.glass, padding: "10px 12px", fontSize: 12, color: S.textPrimary, borderRadius: 12 }}>
+              {log}
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Footer */}
