@@ -144,25 +144,101 @@ const fmt = (v) =>
 const fmtU = (v) =>
   v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(1)}K` : `$${v.toFixed(2)}`
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
+
+const supabaseRequest = async (table, { method = "GET", query = "", body } = {}) => {
+  if (!hasSupabaseConfig) return null
+  const url = `${SUPABASE_URL}/rest/v1/${table}${query ? `?${query}` : ""}`
+  const res = await fetch(url, {
+    method,
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    const msg = await res.text()
+    throw new Error(msg || `Supabase ${method} ${table} failed`)
+  }
+  if (res.status === 204) return null
+  return res.json()
+}
+
+const toAssetRow = (asset) => ({
+  owner: asset.owner,
+  ticker: asset.ticker,
+  name: asset.name,
+  market_type: asset.marketType,
+  quantity: asset.quantity,
+  avg_price: asset.avgPrice,
+  current_price: asset.currentPrice,
+})
+
+const fromAssetRow = (row) => ({
+  owner: row.owner,
+  ticker: row.ticker,
+  name: row.name,
+  marketType: row.market_type,
+  quantity: row.quantity,
+  avgPrice: row.avg_price,
+  currentPrice: row.current_price,
+})
+
+const toSoldRow = (asset) => ({
+  owner: asset.owner,
+  ticker: asset.ticker,
+  name: asset.name,
+  market_type: asset.marketType,
+  quantity: asset.quantity,
+  avg_price: asset.avgPrice,
+  sell_price: asset.sellPrice,
+  realized_pnl: asset.realizedPnl,
+  realized_pnl_pct: asset.realizedPnlPct,
+  sell_date: asset.sellDate,
+})
+
+const fromSoldRow = (row) => ({
+  owner: row.owner,
+  ticker: row.ticker,
+  name: row.name,
+  marketType: row.market_type,
+  quantity: row.quantity,
+  avgPrice: row.avg_price,
+  sellPrice: row.sell_price,
+  realizedPnl: row.realized_pnl,
+  realizedPnlPct: row.realized_pnl_pct,
+  sellDate: row.sell_date,
+})
+
 /* ═══════════════════════════════════════════
    SellModal — 매도 가격 입력
    ═══════════════════════════════════════════ */
 function SellModal({ asset, onConfirm, onClose }) {
   const [sellPrice, setSellPrice] = useState("")
+  const [sellQty, setSellQty] = useState(String(asset.quantity))
   const inputRef = useRef(null)
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100) }, [])
+  useEffect(() => { setSellQty(String(asset.quantity)) }, [asset])
 
   const price = parseFloat(sellPrice) || 0
-  const proceeds = price * asset.quantity
-  const cost = asset.avgPrice * asset.quantity
+  const requestedQty = parseFloat(sellQty) || 0
+  const sellQuantity = Math.min(Math.max(requestedQty, 0), asset.quantity)
+  const proceeds = price * sellQuantity
+  const cost = asset.avgPrice * sellQuantity
   const pnl = proceeds - cost
   const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0
   const isUs = asset.marketType === "us"
 
   const handleConfirm = () => {
-    if (!sellPrice || price <= 0) return
+    if (!sellPrice || price <= 0 || sellQuantity <= 0) return
     onConfirm({
       ...asset,
+      quantity: sellQuantity,
       sellPrice: price,
       sellDate: new Date().toLocaleDateString("ko-KR"),
       realizedPnl: pnl,
@@ -211,6 +287,31 @@ function SellModal({ asset, onConfirm, onClose }) {
           </div>
         </div>
 
+        {/* Sell quantity input */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 11, color: S.textMuted, display: "block", marginBottom: 6 }}>
+            매도 수량
+          </label>
+          <div style={{ ...S.inset, padding: "12px 16px" }}>
+            <input
+              value={sellQty}
+              onChange={(e) => setSellQty(e.target.value)}
+              type="number"
+              min={0}
+              max={asset.quantity}
+              step={asset.marketType === "crypto" ? "0.0001" : "1"}
+              placeholder="0"
+              style={{
+                width: "100%", background: "transparent", border: "none", outline: "none",
+                color: S.textPrimary, fontSize: 16, fontFamily: "'JetBrains Mono',monospace",
+              }}
+            />
+          </div>
+          <div style={{ fontSize: 10, color: S.textMuted, marginTop: 5 }}>
+            최대 {asset.quantity}{asset.marketType === "crypto" ? "" : "주"}까지 매도 가능
+          </div>
+        </div>
+
         {/* Sell price input */}
         <div style={{ marginBottom: 14 }}>
           <label style={{ fontSize: 11, color: S.textMuted, display: "block", marginBottom: 6 }}>
@@ -232,11 +333,12 @@ function SellModal({ asset, onConfirm, onClose }) {
         </div>
 
         {/* Preview */}
-        {price > 0 && (
+        {price > 0 && sellQuantity > 0 && (
           <div style={{ ...S.inset, padding: 14, marginBottom: 16 }}>
             <div style={{ fontSize: 11, color: S.textMuted, marginBottom: 8, fontWeight: 600 }}>매도 예상 결과</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {[
+                ["매도 수량", `${sellQuantity}${asset.marketType === "crypto" ? "" : "주"}`],
                 ["매도 금액", isUs ? fmtU(proceeds) : `${fmt(proceeds)}원`],
                 ["투자 원금", isUs ? fmtU(cost) : `${fmt(cost)}원`],
                 ["실현 손익", `${pnl >= 0 ? "+" : ""}${isUs ? fmtU(pnl) : `${fmt(pnl)}원`}`],
@@ -246,7 +348,7 @@ function SellModal({ asset, onConfirm, onClose }) {
                   <div style={{ fontSize: 10, color: S.textMuted }}>{label}</div>
                   <div style={{
                     fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace",
-                    color: i >= 2 ? (pnl >= 0 ? S.profit : S.loss) : S.textPrimary,
+                    color: i >= 3 ? (pnl >= 0 ? S.profit : S.loss) : S.textPrimary,
                   }}>{value}</div>
                 </div>
               ))}
@@ -263,13 +365,13 @@ function SellModal({ asset, onConfirm, onClose }) {
           </button>
           <button
             onClick={handleConfirm}
-            disabled={!sellPrice || price <= 0}
+            disabled={!sellPrice || price <= 0 || sellQuantity <= 0 || sellQuantity > asset.quantity}
             style={{
               ...S.btn, flex: 2, padding: 12, fontSize: 14, fontWeight: 700, border: "none",
-              background: price > 0 ? "linear-gradient(135deg, #c0392b, #e74c3c)" : S.btn.background,
-              color: price > 0 ? "#fff" : S.textMuted,
-              boxShadow: price > 0 ? "3px 3px 10px rgba(192,57,43,0.35)" : S.btn.boxShadow,
-              cursor: price > 0 ? "pointer" : "not-allowed",
+              background: price > 0 && sellQuantity > 0 ? "linear-gradient(135deg, #c0392b, #e74c3c)" : S.btn.background,
+              color: price > 0 && sellQuantity > 0 ? "#fff" : S.textMuted,
+              boxShadow: price > 0 && sellQuantity > 0 ? "3px 3px 10px rgba(192,57,43,0.35)" : S.btn.boxShadow,
+              cursor: price > 0 && sellQuantity > 0 ? "pointer" : "not-allowed",
             }}
           >
             매도 확정
@@ -279,6 +381,7 @@ function SellModal({ asset, onConfirm, onClose }) {
     </div>
   )
 }
+
 
 /* ═══════════════════════════════════════════
    Components
@@ -778,6 +881,27 @@ export default function GoldenFuture() {
 
   // Sold assets history
   const [soldHistory, setSoldHistory] = useState([])
+  const [syncStatus, setSyncStatus] = useState(hasSupabaseConfig ? "Supabase 동기화 대기" : "Supabase 환경변수 미설정 (로컬 모드)")
+
+  useEffect(() => {
+    if (!hasSupabaseConfig) return
+
+    const loadFromSupabase = async () => {
+      try {
+        const assetRows = await supabaseRequest("golden_assets", { query: "select=owner,ticker,name,market_type,quantity,avg_price,current_price&order=created_at.asc" })
+        const soldRows = await supabaseRequest("golden_sold_history", { query: "select=owner,ticker,name,market_type,quantity,avg_price,sell_price,realized_pnl,realized_pnl_pct,sell_date&order=created_at.asc" })
+
+        if (Array.isArray(assetRows) && assetRows.length > 0) setAssets(assetRows.map(fromAssetRow))
+        if (Array.isArray(soldRows)) setSoldHistory(soldRows.map(fromSoldRow))
+        setSyncStatus("Supabase 동기화 완료")
+      } catch (error) {
+        console.error(error)
+        setSyncStatus("Supabase 동기화 실패 (로컬 데이터 사용)")
+      }
+    }
+
+    loadFromSupabase()
+  }, [])
 
   const [goalAmount] = useState(100000000)
   const [goalLabel] = useState("2027 싱가포르 정착 자금 1억")
@@ -844,13 +968,54 @@ export default function GoldenFuture() {
     return d
   }, [grandTotal])
 
-  const handleSell = (soldAsset) => {
+  const handleSell = async (soldAsset) => {
     const assetIdx = assets.findIndex(
       (a) => a.ticker === soldAsset.ticker && a.owner === soldAsset.owner
     )
     if (assetIdx === -1) return
+
+    const target = assets[assetIdx]
+    const remainQty = target.quantity - soldAsset.quantity
+
     setSoldHistory((prev) => [...prev, soldAsset])
-    setAssets((prev) => prev.filter((_, i) => i !== assetIdx))
+    setAssets((prev) => {
+      if (remainQty <= 0) return prev.filter((_, i) => i !== assetIdx)
+      return prev.map((item, i) => (i === assetIdx ? { ...item, quantity: remainQty } : item))
+    })
+
+    if (!hasSupabaseConfig) return
+
+    try {
+      await supabaseRequest("golden_sold_history", { method: "POST", body: toSoldRow(soldAsset) })
+      if (remainQty <= 0) {
+        await supabaseRequest("golden_assets", {
+          method: "DELETE",
+          query: `owner=eq.${encodeURIComponent(soldAsset.owner)}&ticker=eq.${encodeURIComponent(soldAsset.ticker)}`,
+        })
+      } else {
+        await supabaseRequest("golden_assets", {
+          method: "PATCH",
+          query: `owner=eq.${encodeURIComponent(soldAsset.owner)}&ticker=eq.${encodeURIComponent(soldAsset.ticker)}`,
+          body: { quantity: remainQty },
+        })
+      }
+      setSyncStatus("Supabase 동기화 완료")
+    } catch (error) {
+      console.error(error)
+      setSyncStatus("Supabase 동기화 실패 (재시도 필요)")
+    }
+  }
+
+  const handleAddAsset = async (asset) => {
+    setAssets((prev) => [...prev, asset])
+    if (!hasSupabaseConfig) return
+    try {
+      await supabaseRequest("golden_assets", { method: "POST", body: toAssetRow(asset) })
+      setSyncStatus("Supabase 동기화 완료")
+    } catch (error) {
+      console.error(error)
+      setSyncStatus("Supabase 동기화 실패 (재시도 필요)")
+    }
   }
 
   // Asset table with avgPrice column + monetary PnL + 매도 button
@@ -1360,12 +1525,13 @@ export default function GoldenFuture() {
           <div style={{ ...S.card, padding: 18 }}>
             <div style={{ fontSize: 12, color: S.textMuted, marginBottom: 10, fontWeight: 600 }}>🔌 API 연동 상태</div>
             {[
+              ["Supabase", syncStatus, syncStatus.includes("실패") ? "#e63946" : "#3F72AF"],
               ["KIS 국내주식 API", "준비완료 (키 필요)", "#3F72AF"],
               ["Yahoo Finance / Alpha Vantage", "준비완료 (키 필요)", "#3F72AF"],
               ["CoinGecko 암호화폐", "준비완료 (무료)", "#3F72AF"],
               ["환율 API (open.er-api)", "준비완료 (무료)", "#3F72AF"],
             ].map(([name, status, color], i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < 3 ? "1px solid rgba(180,185,200,0.15)" : "none" }}>
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < 4 ? "1px solid rgba(180,185,200,0.15)" : "none" }}>
                 <span style={{ fontSize: 12, color: S.textSecondary }}>{name}</span>
                 <span style={{ fontSize: 11, fontWeight: 600, color, padding: "2px 8px", background: "rgba(63,114,175,0.1)", borderRadius: 4 }}>{status}</span>
               </div>
@@ -1379,7 +1545,7 @@ export default function GoldenFuture() {
         <AddAssetModal
           owner={showAdd.owner}
           defaultMarket={showAdd.market || null}
-          onAdd={(asset) => setAssets((prev) => [...prev, asset])}
+          onAdd={handleAddAsset}
           onClose={() => setShowAdd(null)}
         />
       )}
