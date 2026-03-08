@@ -1,9 +1,15 @@
 import type { Metadata } from 'next'
-import { Noto_Sans_KR } from 'next/font/google'
+import { Inter, Noto_Sans_KR } from 'next/font/google'
 import './globals.css'
 
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-inter',
+});
+
 const notoSansKr = Noto_Sans_KR({ 
-  subsets: ['latin', 'korean'],
+  subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700'],
   variable: '--font-noto-sans-kr'
 });
@@ -37,15 +43,15 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ko" className={notoSansKr.variable}>
+    <html lang="ko" className={`${inter.variable} ${notoSansKr.variable}`}>
       <head>
         <style>{`
           :root {
-            --font-apple-sd: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Helvetica Neue', sans-serif;
+            --font-apple: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Helvetica Neue', sans-serif;
           }
         `}</style>
       </head>
-      <body className="font-sans antialiased" style={{ fontFamily: 'var(--font-apple-sd)' }}>
+      <body className="font-sans antialiased" style={{ fontFamily: 'var(--font-apple)' }}>
         {children}
       </body>
     </html>
