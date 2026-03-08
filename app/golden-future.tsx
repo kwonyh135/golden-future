@@ -215,6 +215,60 @@ const fromSoldRow = (row) => ({
   sellDate: row.sell_date,
 })
 
+const normalizeAssetsForCompare = (list = []) =>
+  [...list]
+    .map((asset) => ({
+      owner: asset.owner,
+      ticker: asset.ticker,
+      name: asset.name,
+      marketType: asset.marketType,
+      quantity: Number(asset.quantity),
+      avgPrice: Number(asset.avgPrice),
+      currentPrice: Number(asset.currentPrice),
+    }))
+    .sort((a, b) => `${a.owner}-${a.ticker}`.localeCompare(`${b.owner}-${b.ticker}`))
+
+const normalizeSoldForCompare = (list = []) =>
+  [...list]
+    .map((asset) => ({
+      owner: asset.owner,
+      ticker: asset.ticker,
+      name: asset.name,
+      marketType: asset.marketType,
+      quantity: Number(asset.quantity),
+      avgPrice: Number(asset.avgPrice),
+      sellPrice: Number(asset.sellPrice),
+      realizedPnl: Number(asset.realizedPnl),
+      realizedPnlPct: Number(asset.realizedPnlPct),
+      sellDate: asset.sellDate,
+    }))
+    .sort((a, b) => `${a.owner}-${a.ticker}-${a.sellDate}`.localeCompare(`${b.owner}-${b.ticker}-${b.sellDate}`))
+
+const isSameData = (left, right) => JSON.stringify(left) === JSON.stringify(right)
+
+const INITIAL_ASSETS = [
+  // 용's portfolio
+  { owner: "용", ticker: "005930", name: "삼성전자", marketType: "kr", quantity: 50, avgPrice: 68000, currentPrice: 72500 },
+  { owner: "용", ticker: "000660", name: "SK하이닉스", marketType: "kr", quantity: 20, avgPrice: 155000, currentPrice: 178000 },
+  { owner: "용", ticker: "035420", name: "NAVER", marketType: "kr", quantity: 15, avgPrice: 195000, currentPrice: 215000 },
+  { owner: "용", ticker: "NVDA", name: "NVIDIA", marketType: "us", quantity: 10, avgPrice: 720, currentPrice: 880.5 },
+  { owner: "용", ticker: "VOO", name: "Vanguard S&P 500", marketType: "us", quantity: 15, avgPrice: 440, currentPrice: 495.3 },
+  { owner: "용", ticker: "AAPL", name: "Apple", marketType: "us", quantity: 20, avgPrice: 165, currentPrice: 195.2 },
+  { owner: "용", ticker: "BTC", name: "Bitcoin", marketType: "crypto", quantity: 0.15, avgPrice: 85000000, currentPrice: 97250000 },
+  { owner: "용", ticker: "SOL", name: "Solana", marketType: "crypto", quantity: 50, avgPrice: 180000, currentPrice: 285000 },
+  // 령's portfolio
+  { owner: "령", ticker: "005380", name: "현대차", marketType: "kr", quantity: 25, avgPrice: 210000, currentPrice: 245000 },
+  { owner: "령", ticker: "042700", name: "한미반도체", marketType: "kr", quantity: 40, avgPrice: 98000, currentPrice: 125000 },
+  { owner: "령", ticker: "MSFT", name: "Microsoft", marketType: "us", quantity: 8, avgPrice: 350, currentPrice: 420.5 },
+  { owner: "령", ticker: "SCHD", name: "Schwab Dividend ETF", marketType: "us", quantity: 40, avgPrice: 72, currentPrice: 78.5 },
+  { owner: "령", ticker: "TSLA", name: "Tesla", marketType: "us", quantity: 12, avgPrice: 210, currentPrice: 245.6 },
+  { owner: "령", ticker: "KO", name: "Coca-Cola", marketType: "us", quantity: 30, avgPrice: 55, currentPrice: 62.5 },
+  { owner: "령", ticker: "ETH", name: "Ethereum", marketType: "crypto", quantity: 2, avgPrice: 3800000, currentPrice: 4850000 },
+  { owner: "령", ticker: "DOGE", name: "Dogecoin", marketType: "crypto", quantity: 10000, avgPrice: 350, currentPrice: 580 },
+]
+
+const INITIAL_SOLD_HISTORY = []
+
 /* ═══════════════════════════════════════════
    SellModal — 매도 가격 입력
    ═══════════════════════════════════════════ */
@@ -858,29 +912,10 @@ export default function GoldenFuture() {
   const [selectedUser, setSelectedUser] = useState<"전체" | "용" | "령">("전체")
   const [showAdd, setShowAdd] = useState(null)
   const [sellTarget, setSellTarget] = useState(null) // asset being sold
-  const [assets, setAssets] = useState([
-    // 용's portfolio
-    { owner: "용", ticker: "005930", name: "삼성전자", marketType: "kr", quantity: 50, avgPrice: 68000, currentPrice: 72500 },
-    { owner: "용", ticker: "000660", name: "SK하이닉스", marketType: "kr", quantity: 20, avgPrice: 155000, currentPrice: 178000 },
-    { owner: "용", ticker: "035420", name: "NAVER", marketType: "kr", quantity: 15, avgPrice: 195000, currentPrice: 215000 },
-    { owner: "용", ticker: "NVDA", name: "NVIDIA", marketType: "us", quantity: 10, avgPrice: 720, currentPrice: 880.5 },
-    { owner: "용", ticker: "VOO", name: "Vanguard S&P 500", marketType: "us", quantity: 15, avgPrice: 440, currentPrice: 495.3 },
-    { owner: "용", ticker: "AAPL", name: "Apple", marketType: "us", quantity: 20, avgPrice: 165, currentPrice: 195.2 },
-    { owner: "용", ticker: "BTC", name: "Bitcoin", marketType: "crypto", quantity: 0.15, avgPrice: 85000000, currentPrice: 97250000 },
-    { owner: "용", ticker: "SOL", name: "Solana", marketType: "crypto", quantity: 50, avgPrice: 180000, currentPrice: 285000 },
-    // 령's portfolio
-    { owner: "령", ticker: "005380", name: "현대차", marketType: "kr", quantity: 25, avgPrice: 210000, currentPrice: 245000 },
-    { owner: "령", ticker: "042700", name: "한미반도체", marketType: "kr", quantity: 40, avgPrice: 98000, currentPrice: 125000 },
-    { owner: "령", ticker: "MSFT", name: "Microsoft", marketType: "us", quantity: 8, avgPrice: 350, currentPrice: 420.5 },
-    { owner: "령", ticker: "SCHD", name: "Schwab Dividend ETF", marketType: "us", quantity: 40, avgPrice: 72, currentPrice: 78.5 },
-    { owner: "령", ticker: "TSLA", name: "Tesla", marketType: "us", quantity: 12, avgPrice: 210, currentPrice: 245.6 },
-    { owner: "령", ticker: "KO", name: "Coca-Cola", marketType: "us", quantity: 30, avgPrice: 55, currentPrice: 62.5 },
-    { owner: "령", ticker: "ETH", name: "Ethereum", marketType: "crypto", quantity: 2, avgPrice: 3800000, currentPrice: 4850000 },
-    { owner: "령", ticker: "DOGE", name: "Dogecoin", marketType: "crypto", quantity: 10000, avgPrice: 350, currentPrice: 580 },
-  ])
+  const [assets, setAssets] = useState(hasSupabaseConfig ? [] : INITIAL_ASSETS)
 
   // Sold assets history
-  const [soldHistory, setSoldHistory] = useState([])
+  const [soldHistory, setSoldHistory] = useState(hasSupabaseConfig ? [] : INITIAL_SOLD_HISTORY)
   const [syncStatus, setSyncStatus] = useState(hasSupabaseConfig ? "Supabase 동기화 대기" : "Supabase 환경변수 미설정 (로컬 모드)")
   const [saveLogs, setSaveLogs] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
@@ -898,14 +933,29 @@ export default function GoldenFuture() {
         const assetRows = await supabaseRequest("golden_assets", { query: "select=owner,ticker,name,market_type,quantity,avg_price,current_price&order=created_at.asc" })
         const soldRows = await supabaseRequest("golden_sold_history", { query: "select=owner,ticker,name,market_type,quantity,avg_price,sell_price,realized_pnl,realized_pnl_pct,sell_date&order=created_at.asc" })
 
-        if (Array.isArray(assetRows) && assetRows.length > 0) setAssets(assetRows.map(fromAssetRow))
-        if (Array.isArray(soldRows)) setSoldHistory(soldRows.map(fromSoldRow))
-        setSyncStatus("Supabase 동기화 완료")
-        pushSaveLog("Supabase 데이터 로딩 성공")
+        const remoteAssets = Array.isArray(assetRows) ? assetRows.map(fromAssetRow) : []
+        const remoteSoldHistory = Array.isArray(soldRows) ? soldRows.map(fromSoldRow) : []
+
+        const normalizedRemoteAssets = normalizeAssetsForCompare(remoteAssets)
+        const normalizedRemoteSold = normalizeSoldForCompare(remoteSoldHistory)
+        const normalizedInitialAssets = normalizeAssetsForCompare(INITIAL_ASSETS)
+        const isAssetDataSame = isSameData(normalizedRemoteAssets, normalizedInitialAssets)
+        const isSoldDataSame = isSameData(normalizedRemoteSold, INITIAL_SOLD_HISTORY)
+
+        if (!isAssetDataSame || !isSoldDataSame) {
+          pushSaveLog("초기 데이터와 Supabase 데이터 불일치 감지")
+          setSyncStatus("Supabase 데이터 불일치 감지")
+        } else {
+          setSyncStatus("Supabase 동기화 완료")
+          pushSaveLog("Supabase 데이터 일치 확인 완료")
+        }
+
+        setAssets(remoteAssets)
+        setSoldHistory(remoteSoldHistory)
       } catch (error) {
         console.error(error)
-        setSyncStatus("Supabase 동기화 실패 (로컬 데이터 사용)")
-        pushSaveLog("Supabase 로딩 실패, 로컬 데이터 사용")
+        setSyncStatus("Supabase 점검 실패 (테이블/데이터 확인 필요)")
+        pushSaveLog("Supabase 점검 실패: 테이블/권한/데이터 확인 필요")
       }
     }
 
