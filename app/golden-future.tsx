@@ -1225,44 +1225,6 @@ export default function GoldenFuture() {
             <div style={{ overflowX: "auto" }}>{renderAssetTable(byMarket(tab))}</div>
           </div>
 
-          {/* Owner breakdown */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {(selectedUser === "전체" ? ["용", "령"] : [selectedUser]).map((name) => {
-              const items = evaluated.filter((a) => a.marketType === tab && a.owner === name)
-              const total = items.reduce((s, a) => s + a.krwValue, 0)
-              const pnl = items.reduce((s, a) => s + (a.krwValue - a.krwCost), 0)
-              return (
-                <div key={name} style={{ ...S.card, padding: 18 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: name === "용" ? "#8b7355" : "#6b83a8" }}>
-                      {name === "용" ? "🐉" : "🐲"} {name}
-                    </span>
-                    <button
-                      onClick={() => setShowAdd({ owner: name, market: tab })}
-                      style={{ background: "none", border: "none", color: S.accent, cursor: "pointer", fontSize: 18, fontWeight: 700 }}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: S.textPrimary, fontFamily: "'JetBrains Mono',monospace" }}>{fmt(total)}</div>
-                  <div style={{ fontSize: 12, color: pnl >= 0 ? S.profit : S.loss, fontFamily: "'JetBrains Mono',monospace" }}>
-                    {pnl >= 0 ? "+" : ""}{fmt(pnl)}
-                  </div>
-                  <div style={{ marginTop: 8 }}>
-                    {items.map((a, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: 12, borderBottom: i < items.length - 1 ? "1px solid rgba(180,185,200,0.2)" : "none" }}>
-                        <span style={{ color: S.textPrimary }}>{a.name}</span>
-                        <span style={{ color: a.pnlPct >= 0 ? S.profit : S.loss, fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>
-                          {a.pnlPct >= 0 ? "+" : ""}{a.pnlPct.toFixed(1)}%
-                        </span>
-                      </div>
-                    ))}
-                    {items.length === 0 && <div style={{ fontSize: 12, color: S.textMuted, textAlign: "center", padding: 8 }}>종목 없음</div>}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
         </div>
       )}
 
@@ -1313,7 +1275,7 @@ export default function GoldenFuture() {
             {filteredSoldHistory.length === 0 ? (
               <div style={{ textAlign: "center", color: S.textMuted, padding: "24px 0", fontSize: 13 }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>📭</div>
-                해당 사용자의 매도 이력이 없습니다
+                {selectedUser === "전체" ? "아직 매도한 종목이 없습니다" : "해당 사용자의 매도 이력이 없습니다"}
               </div>
             ) : (
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 4px" }}>

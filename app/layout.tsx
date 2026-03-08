@@ -1,18 +1,5 @@
 import type { Metadata } from 'next'
-import { Inter, Noto_Sans_KR } from 'next/font/google'
 import './globals.css'
-
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-inter',
-});
-
-const notoSansKr = Noto_Sans_KR({ 
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  variable: '--font-noto-sans-kr'
-});
 
 export const metadata: Metadata = {
   title: '금빛 미래 · Golden Future',
@@ -43,7 +30,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ko" className={`${inter.variable} ${notoSansKr.variable}`}>
+    <html lang="ko">
       <head>
         <style>{`
           :root {
