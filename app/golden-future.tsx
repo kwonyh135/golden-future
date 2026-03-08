@@ -19,45 +19,45 @@ import {
    Blue Tone Design System & Config
    ═══════════════════════════════════════════ */
 const S = {
-  bg: "#F9F7F7",
+  bg: "linear-gradient(180deg, #f5f7fb 0%, #eef2f8 100%)",
   card: {
-    background: "#F9F7F7",
-    boxShadow: "8px 8px 20px rgba(17,45,78,0.2), -4px -4px 12px rgba(255,255,255,0.9)",
-    borderRadius: 20,
-    border: "1px solid rgba(219,226,239,0.6)",
+    background: "rgba(255,255,255,0.78)",
+    boxShadow: "0 14px 32px rgba(15,23,42,0.08)",
+    borderRadius: 24,
+    border: "1px solid rgba(255,255,255,0.85)",
   },
   inset: {
-    background: "#DBE2EF",
-    boxShadow: "inset 3px 3px 8px rgba(17,45,78,0.1), inset -2px -2px 6px rgba(255,255,255,0.8)",
+    background: "rgba(238,243,251,0.9)",
+    boxShadow: "inset 0 1px 3px rgba(148,163,184,0.25)",
     borderRadius: 14,
-    border: "1px solid rgba(219,226,239,0.4)",
+    border: "1px solid rgba(226,232,240,0.9)",
   },
   btn: {
-    background: "#F9F7F7",
-    boxShadow: "4px 4px 12px rgba(17,45,78,0.15), -2px -2px 8px rgba(255,255,255,0.8)",
-    borderRadius: 12,
-    border: "1px solid rgba(219,226,239,0.4)",
+    background: "rgba(255,255,255,0.78)",
+    boxShadow: "0 6px 16px rgba(15,23,42,0.07)",
+    borderRadius: 14,
+    border: "1px solid rgba(226,232,240,0.9)",
     cursor: "pointer",
-    transition: "all 0.12s ease",
+    transition: "all 0.18s ease",
   },
   btnPress: {
-    background: "#DBE2EF",
-    boxShadow: "inset 2px 2px 6px rgba(17,45,78,0.1), inset -2px -2px 6px rgba(255,255,255,0.7)",
+    background: "rgba(219,234,254,0.9)",
+    boxShadow: "inset 0 1px 2px rgba(59,130,246,0.2)",
   },
-  accent: "#3F72AF",
-  accentGrad: "linear-gradient(135deg, #2d5a8c, #3F72AF, #2d5a8c)",
-  accentLight: "#5a8fc7",
-  textPrimary: "#112D4E",
-  textSecondary: "#3F72AF",
-  textMuted: "#6b7085",
+  accent: "#2563eb",
+  accentGrad: "linear-gradient(135deg, #1d4ed8, #2563eb, #3b82f6)",
+  accentLight: "#60a5fa",
+  textPrimary: "#0f172a",
+  textSecondary: "#1d4ed8",
+  textMuted: "#64748b",
   profit: "#e63946",
   loss: "#1e88e5",
   glass: {
-    background: "rgba(249,247,247,0.8)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
-    border: "1px solid rgba(219,226,239,0.6)",
-    borderRadius: 20,
+    background: "rgba(255,255,255,0.65)",
+    backdropFilter: "blur(24px)",
+    WebkitBackdropFilter: "blur(24px)",
+    border: "1px solid rgba(255,255,255,0.8)",
+    borderRadius: 24,
   },
 }
 
@@ -144,25 +144,101 @@ const fmt = (v) =>
 const fmtU = (v) =>
   v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(1)}K` : `$${v.toFixed(2)}`
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
+
+const supabaseRequest = async (table, { method = "GET", query = "", body } = {}) => {
+  if (!hasSupabaseConfig) return null
+  const url = `${SUPABASE_URL}/rest/v1/${table}${query ? `?${query}` : ""}`
+  const res = await fetch(url, {
+    method,
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    const msg = await res.text()
+    throw new Error(msg || `Supabase ${method} ${table} failed`)
+  }
+  if (res.status === 204) return null
+  return res.json()
+}
+
+const toAssetRow = (asset) => ({
+  owner: asset.owner,
+  ticker: asset.ticker,
+  name: asset.name,
+  market_type: asset.marketType,
+  quantity: asset.quantity,
+  avg_price: asset.avgPrice,
+  current_price: asset.currentPrice,
+})
+
+const fromAssetRow = (row) => ({
+  owner: row.owner,
+  ticker: row.ticker,
+  name: row.name,
+  marketType: row.market_type,
+  quantity: row.quantity,
+  avgPrice: row.avg_price,
+  currentPrice: row.current_price,
+})
+
+const toSoldRow = (asset) => ({
+  owner: asset.owner,
+  ticker: asset.ticker,
+  name: asset.name,
+  market_type: asset.marketType,
+  quantity: asset.quantity,
+  avg_price: asset.avgPrice,
+  sell_price: asset.sellPrice,
+  realized_pnl: asset.realizedPnl,
+  realized_pnl_pct: asset.realizedPnlPct,
+  sell_date: asset.sellDate,
+})
+
+const fromSoldRow = (row) => ({
+  owner: row.owner,
+  ticker: row.ticker,
+  name: row.name,
+  marketType: row.market_type,
+  quantity: row.quantity,
+  avgPrice: row.avg_price,
+  sellPrice: row.sell_price,
+  realizedPnl: row.realized_pnl,
+  realizedPnlPct: row.realized_pnl_pct,
+  sellDate: row.sell_date,
+})
+
 /* ═══════════════════════════════════════════
    SellModal — 매도 가격 입력
    ═══════════════════════════════════════════ */
 function SellModal({ asset, onConfirm, onClose }) {
   const [sellPrice, setSellPrice] = useState("")
+  const [sellQty, setSellQty] = useState(String(asset.quantity))
   const inputRef = useRef(null)
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100) }, [])
+  useEffect(() => { setSellQty(String(asset.quantity)) }, [asset])
 
   const price = parseFloat(sellPrice) || 0
-  const proceeds = price * asset.quantity
-  const cost = asset.avgPrice * asset.quantity
+  const requestedQty = parseFloat(sellQty) || 0
+  const sellQuantity = Math.min(Math.max(requestedQty, 0), asset.quantity)
+  const proceeds = price * sellQuantity
+  const cost = asset.avgPrice * sellQuantity
   const pnl = proceeds - cost
   const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0
   const isUs = asset.marketType === "us"
 
   const handleConfirm = () => {
-    if (!sellPrice || price <= 0) return
+    if (!sellPrice || price <= 0 || sellQuantity <= 0) return
     onConfirm({
       ...asset,
+      quantity: sellQuantity,
       sellPrice: price,
       sellDate: new Date().toLocaleDateString("ko-KR"),
       realizedPnl: pnl,
@@ -211,6 +287,31 @@ function SellModal({ asset, onConfirm, onClose }) {
           </div>
         </div>
 
+        {/* Sell quantity input */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 11, color: S.textMuted, display: "block", marginBottom: 6 }}>
+            매도 수량
+          </label>
+          <div style={{ ...S.inset, padding: "12px 16px" }}>
+            <input
+              value={sellQty}
+              onChange={(e) => setSellQty(e.target.value)}
+              type="number"
+              min={0}
+              max={asset.quantity}
+              step={asset.marketType === "crypto" ? "0.0001" : "1"}
+              placeholder="0"
+              style={{
+                width: "100%", background: "transparent", border: "none", outline: "none",
+                color: S.textPrimary, fontSize: 16, fontFamily: "'JetBrains Mono',monospace",
+              }}
+            />
+          </div>
+          <div style={{ fontSize: 10, color: S.textMuted, marginTop: 5 }}>
+            최대 {asset.quantity}{asset.marketType === "crypto" ? "" : "주"}까지 매도 가능
+          </div>
+        </div>
+
         {/* Sell price input */}
         <div style={{ marginBottom: 14 }}>
           <label style={{ fontSize: 11, color: S.textMuted, display: "block", marginBottom: 6 }}>
@@ -232,11 +333,12 @@ function SellModal({ asset, onConfirm, onClose }) {
         </div>
 
         {/* Preview */}
-        {price > 0 && (
+        {price > 0 && sellQuantity > 0 && (
           <div style={{ ...S.inset, padding: 14, marginBottom: 16 }}>
             <div style={{ fontSize: 11, color: S.textMuted, marginBottom: 8, fontWeight: 600 }}>매도 예상 결과</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {[
+                ["매도 수량", `${sellQuantity}${asset.marketType === "crypto" ? "" : "주"}`],
                 ["매도 금액", isUs ? fmtU(proceeds) : `${fmt(proceeds)}원`],
                 ["투자 원금", isUs ? fmtU(cost) : `${fmt(cost)}원`],
                 ["실현 손익", `${pnl >= 0 ? "+" : ""}${isUs ? fmtU(pnl) : `${fmt(pnl)}원`}`],
@@ -246,7 +348,7 @@ function SellModal({ asset, onConfirm, onClose }) {
                   <div style={{ fontSize: 10, color: S.textMuted }}>{label}</div>
                   <div style={{
                     fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace",
-                    color: i >= 2 ? (pnl >= 0 ? S.profit : S.loss) : S.textPrimary,
+                    color: i >= 3 ? (pnl >= 0 ? S.profit : S.loss) : S.textPrimary,
                   }}>{value}</div>
                 </div>
               ))}
@@ -263,13 +365,13 @@ function SellModal({ asset, onConfirm, onClose }) {
           </button>
           <button
             onClick={handleConfirm}
-            disabled={!sellPrice || price <= 0}
+            disabled={!sellPrice || price <= 0 || sellQuantity <= 0 || sellQuantity > asset.quantity}
             style={{
               ...S.btn, flex: 2, padding: 12, fontSize: 14, fontWeight: 700, border: "none",
-              background: price > 0 ? "linear-gradient(135deg, #c0392b, #e74c3c)" : S.btn.background,
-              color: price > 0 ? "#fff" : S.textMuted,
-              boxShadow: price > 0 ? "3px 3px 10px rgba(192,57,43,0.35)" : S.btn.boxShadow,
-              cursor: price > 0 ? "pointer" : "not-allowed",
+              background: price > 0 && sellQuantity > 0 ? "linear-gradient(135deg, #c0392b, #e74c3c)" : S.btn.background,
+              color: price > 0 && sellQuantity > 0 ? "#fff" : S.textMuted,
+              boxShadow: price > 0 && sellQuantity > 0 ? "3px 3px 10px rgba(192,57,43,0.35)" : S.btn.boxShadow,
+              cursor: price > 0 && sellQuantity > 0 ? "pointer" : "not-allowed",
             }}
           >
             매도 확정
@@ -279,6 +381,7 @@ function SellModal({ asset, onConfirm, onClose }) {
     </div>
   )
 }
+
 
 /* ═══════════════════════════════════════════
    Components
@@ -752,7 +855,7 @@ function WeeklyReview({ evaluated, grandTotal }) {
    ═══════════════════════════════════════════ */
 export default function GoldenFuture() {
   const [tab, setTab] = useState("dashboard")
-  const [selectedUser, setSelectedUser] = useState<string | null>(null)
+  const [selectedUser, setSelectedUser] = useState<"전체" | "용" | "령">("전체")
   const [showAdd, setShowAdd] = useState(null)
   const [sellTarget, setSellTarget] = useState(null) // asset being sold
   const [assets, setAssets] = useState([
@@ -778,6 +881,36 @@ export default function GoldenFuture() {
 
   // Sold assets history
   const [soldHistory, setSoldHistory] = useState([])
+  const [syncStatus, setSyncStatus] = useState(hasSupabaseConfig ? "Supabase 동기화 대기" : "Supabase 환경변수 미설정 (로컬 모드)")
+  const [saveLogs, setSaveLogs] = useState<string[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+
+  const pushSaveLog = (msg) => {
+    const t = new Date().toLocaleTimeString("ko-KR", { hour12: false })
+    setSaveLogs((prev) => [`${t} · ${msg}`, ...prev].slice(0, 5))
+  }
+
+  useEffect(() => {
+    if (!hasSupabaseConfig) return
+
+    const loadFromSupabase = async () => {
+      try {
+        const assetRows = await supabaseRequest("golden_assets", { query: "select=owner,ticker,name,market_type,quantity,avg_price,current_price&order=created_at.asc" })
+        const soldRows = await supabaseRequest("golden_sold_history", { query: "select=owner,ticker,name,market_type,quantity,avg_price,sell_price,realized_pnl,realized_pnl_pct,sell_date&order=created_at.asc" })
+
+        if (Array.isArray(assetRows) && assetRows.length > 0) setAssets(assetRows.map(fromAssetRow))
+        if (Array.isArray(soldRows)) setSoldHistory(soldRows.map(fromSoldRow))
+        setSyncStatus("Supabase 동기화 완료")
+        pushSaveLog("Supabase 데이터 로딩 성공")
+      } catch (error) {
+        console.error(error)
+        setSyncStatus("Supabase 동기화 실패 (로컬 데이터 사용)")
+        pushSaveLog("Supabase 로딩 실패, 로컬 데이터 사용")
+      }
+    }
+
+    loadFromSupabase()
+  }, [])
 
   const [goalAmount] = useState(100000000)
   const [goalLabel] = useState("2027 싱가포르 정착 자금 1억")
@@ -801,7 +934,7 @@ export default function GoldenFuture() {
 
   const evaluated = useMemo(() => {
     const all = assets.map(evalAsset)
-    return selectedUser ? all.filter((a) => a.owner === selectedUser) : all
+    return selectedUser === "전체" ? all : all.filter((a) => a.owner === selectedUser)
   }, [assets, exchangeRate, selectedUser])
   
   const grandTotal = evaluated.reduce((s, a) => s + a.krwValue, 0)
@@ -821,8 +954,8 @@ export default function GoldenFuture() {
     { name: "암호화폐", value: marketTotal("crypto"), color: "#112D4E" },
   ].filter((d) => d.value > 0)
 
-  const contribData = selectedUser 
-    ? [] 
+  const contribData = selectedUser !== "전체"
+    ? []
     : [
         { name: "용", value: ownerTotal("용"), color: "#3F72AF" },
         { name: "령", value: ownerTotal("령"), color: "#5a8fc7" },
@@ -844,13 +977,87 @@ export default function GoldenFuture() {
     return d
   }, [grandTotal])
 
-  const handleSell = (soldAsset) => {
+  const handleSaveToSupabase = async () => {
+    if (!hasSupabaseConfig) {
+      setSyncStatus("Supabase 환경변수 미설정 (로컬 모드)")
+      pushSaveLog("저장 실패: Supabase 환경변수 미설정")
+      return
+    }
+
+    setIsSaving(true)
+    setSyncStatus("Supabase 저장 중...")
+    pushSaveLog("수동 저장 시작")
+
+    try {
+      await supabaseRequest("golden_assets", { method: "DELETE", query: "id=gt.0" })
+      await supabaseRequest("golden_sold_history", { method: "DELETE", query: "id=gt.0" })
+
+      if (assets.length > 0) {
+        await supabaseRequest("golden_assets", { method: "POST", body: assets.map(toAssetRow) })
+      }
+      if (soldHistory.length > 0) {
+        await supabaseRequest("golden_sold_history", { method: "POST", body: soldHistory.map(toSoldRow) })
+      }
+
+      setSyncStatus("Supabase 저장 완료")
+      pushSaveLog(`저장 완료: 자산 ${assets.length}건, 매도이력 ${soldHistory.length}건`)
+    } catch (error) {
+      console.error(error)
+      setSyncStatus("Supabase 저장 실패")
+      pushSaveLog("저장 실패: RLS/테이블/키 설정 확인 필요")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSell = async (soldAsset) => {
     const assetIdx = assets.findIndex(
       (a) => a.ticker === soldAsset.ticker && a.owner === soldAsset.owner
     )
     if (assetIdx === -1) return
+
+    const target = assets[assetIdx]
+    const remainQty = target.quantity - soldAsset.quantity
+
     setSoldHistory((prev) => [...prev, soldAsset])
-    setAssets((prev) => prev.filter((_, i) => i !== assetIdx))
+    setAssets((prev) => {
+      if (remainQty <= 0) return prev.filter((_, i) => i !== assetIdx)
+      return prev.map((item, i) => (i === assetIdx ? { ...item, quantity: remainQty } : item))
+    })
+
+    if (!hasSupabaseConfig) return
+
+    try {
+      await supabaseRequest("golden_sold_history", { method: "POST", body: toSoldRow(soldAsset) })
+      if (remainQty <= 0) {
+        await supabaseRequest("golden_assets", {
+          method: "DELETE",
+          query: `owner=eq.${encodeURIComponent(soldAsset.owner)}&ticker=eq.${encodeURIComponent(soldAsset.ticker)}`,
+        })
+      } else {
+        await supabaseRequest("golden_assets", {
+          method: "PATCH",
+          query: `owner=eq.${encodeURIComponent(soldAsset.owner)}&ticker=eq.${encodeURIComponent(soldAsset.ticker)}`,
+          body: { quantity: remainQty },
+        })
+      }
+      setSyncStatus("Supabase 동기화 완료")
+    } catch (error) {
+      console.error(error)
+      setSyncStatus("Supabase 동기화 실패 (재시도 필요)")
+    }
+  }
+
+  const handleAddAsset = async (asset) => {
+    setAssets((prev) => [...prev, asset])
+    if (!hasSupabaseConfig) return
+    try {
+      await supabaseRequest("golden_assets", { method: "POST", body: toAssetRow(asset) })
+      setSyncStatus("Supabase 동기화 완료")
+    } catch (error) {
+      console.error(error)
+      setSyncStatus("Supabase 동기화 실패 (재시도 필요)")
+    }
   }
 
   // Asset table with avgPrice column + monetary PnL + 매도 button
@@ -941,7 +1148,7 @@ export default function GoldenFuture() {
     </table>
   )
 
-  const tabs = selectedUser
+  const tabs = selectedUser !== "전체"
     ? [
         ["kr", "🇰🇷 국내주식"],
         ["us", "🇺🇸 해외주식"],
@@ -956,8 +1163,12 @@ export default function GoldenFuture() {
         ["insights", "리포트"],
       ];
 
+  const filteredSoldHistory = selectedUser === "전체"
+    ? soldHistory
+    : soldHistory.filter((item) => item.owner === selectedUser)
+
   // Total realized PnL from sold history
-  const totalRealizedPnl = soldHistory.reduce((s, a) => {
+  const totalRealizedPnl = filteredSoldHistory.reduce((s, a) => {
     const pnl = a.realizedPnl
     if (a.marketType === "us") return s + pnl * exchangeRate
     return s + pnl
@@ -969,13 +1180,13 @@ export default function GoldenFuture() {
         minHeight: "100vh",
         background: S.bg,
         color: S.textPrimary,
-        fontFamily: "var(--font-apple-sd)",
+        fontFamily: "var(--font-apple)",
         padding: "16px",
         maxWidth: 1000,
         margin: "0 auto",
       }}
     >
-      <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Serif+KR:wght@500;700;900&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
       <style>{`
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width:6px; }
@@ -987,17 +1198,30 @@ export default function GoldenFuture() {
 
       {/* User Selection Buttons */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 20 }}>
-        {["용", "령"].map((user) => (
+        <button
+          onClick={handleSaveToSupabase}
+          disabled={isSaving}
+          style={{
+            ...(isSaving ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: S.accent }),
+            padding: "8px 14px",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: isSaving ? "wait" : "pointer",
+          }}
+        >
+          {isSaving ? "저장 중..." : "💾 저장"}
+        </button>
+        {["전체", "용", "령"].map((user) => (
           <button
             key={user}
             onClick={() => {
-              if (selectedUser === user) {
-                setSelectedUser(null)
+              if (user === "전체") {
+                setSelectedUser("전체")
                 setTab("dashboard")
-              } else {
-                setSelectedUser(user)
-                setTab("kr")
+                return
               }
+              setSelectedUser(user as "용" | "령")
+              setTab("kr")
             }}
             style={{
               ...(selectedUser === user ? { ...S.btn, ...S.btnPress, color: S.accent } : S.btn),
@@ -1191,7 +1415,7 @@ export default function GoldenFuture() {
                 </div>
               </div>
               <button
-                onClick={() => setShowAdd({ owner: selectedUser || null, market: tab })}
+                onClick={() => setShowAdd({ owner: selectedUser === "전체" ? null : selectedUser, market: tab })}
                 style={{ ...S.btn, padding: "8px 16px", fontSize: 13, color: S.accent, fontWeight: 600 }}
               >
                 + 매수
@@ -1221,44 +1445,6 @@ export default function GoldenFuture() {
             <div style={{ overflowX: "auto" }}>{renderAssetTable(byMarket(tab))}</div>
           </div>
 
-          {/* Owner breakdown */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {["용", "령"].map((name) => {
-              const items = evaluated.filter((a) => a.marketType === tab && a.owner === name)
-              const total = items.reduce((s, a) => s + a.krwValue, 0)
-              const pnl = items.reduce((s, a) => s + (a.krwValue - a.krwCost), 0)
-              return (
-                <div key={name} style={{ ...S.card, padding: 18 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: name === "용" ? "#8b7355" : "#6b83a8" }}>
-                      {name === "용" ? "🐉" : "🐲"} {name}
-                    </span>
-                    <button
-                      onClick={() => setShowAdd({ owner: name, market: tab })}
-                      style={{ background: "none", border: "none", color: S.accent, cursor: "pointer", fontSize: 18, fontWeight: 700 }}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: S.textPrimary, fontFamily: "'JetBrains Mono',monospace" }}>{fmt(total)}</div>
-                  <div style={{ fontSize: 12, color: pnl >= 0 ? S.profit : S.loss, fontFamily: "'JetBrains Mono',monospace" }}>
-                    {pnl >= 0 ? "+" : ""}{fmt(pnl)}
-                  </div>
-                  <div style={{ marginTop: 8 }}>
-                    {items.map((a, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: 12, borderBottom: i < items.length - 1 ? "1px solid rgba(180,185,200,0.2)" : "none" }}>
-                        <span style={{ color: S.textPrimary }}>{a.name}</span>
-                        <span style={{ color: a.pnlPct >= 0 ? S.profit : S.loss, fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>
-                          {a.pnlPct >= 0 ? "+" : ""}{a.pnlPct.toFixed(1)}%
-                        </span>
-                      </div>
-                    ))}
-                    {items.length === 0 && <div style={{ fontSize: 12, color: S.textMuted, textAlign: "center", padding: 8 }}>종목 없음</div>}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
         </div>
       )}
 
@@ -1299,17 +1485,17 @@ export default function GoldenFuture() {
           <div style={{ ...S.card, padding: 24, marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div style={{ fontSize: 13, color: S.textMuted, fontWeight: 600 }}>📤 매도 이력</div>
-              {soldHistory.length > 0 && (
+              {filteredSoldHistory.length > 0 && (
                 <div style={{ ...S.inset, padding: "4px 12px", fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: totalRealizedPnl >= 0 ? S.profit : S.loss, fontWeight: 700 }}>
                   실현손익 합계: {totalRealizedPnl >= 0 ? "+" : ""}{fmt(totalRealizedPnl)}원
                 </div>
               )}
             </div>
 
-            {soldHistory.length === 0 ? (
+            {filteredSoldHistory.length === 0 ? (
               <div style={{ textAlign: "center", color: S.textMuted, padding: "24px 0", fontSize: 13 }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>📭</div>
-                아직 매도한 종목이 없습니다
+                {selectedUser === "전체" ? "아직 매도한 종목이 없습니다" : "해당 사용자의 매도 이력이 없습니다"}
               </div>
             ) : (
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 4px" }}>
@@ -1326,7 +1512,7 @@ export default function GoldenFuture() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...soldHistory].reverse().map((a, i) => {
+                  {[...filteredSoldHistory].reverse().map((a, i) => {
                     const isUs = a.marketType === "us"
                     const pnlKrw = isUs ? a.realizedPnl * exchangeRate : a.realizedPnl
                     return (
@@ -1369,7 +1555,7 @@ export default function GoldenFuture() {
           {/* Dividend Calendar */}
           <div style={{ ...S.card, padding: 24, marginBottom: 16 }}>
             <div style={{ fontSize: 13, color: S.textMuted, marginBottom: 16, fontWeight: 600 }}>📅 배당금 달력</div>
-            <DividendCalendar assets={assets} />
+            <DividendCalendar assets={selectedUser === "전체" ? assets : assets.filter((a) => a.owner === selectedUser)} />
           </div>
 
           {/* Monthly P&L */}
@@ -1394,12 +1580,13 @@ export default function GoldenFuture() {
           <div style={{ ...S.card, padding: 18 }}>
             <div style={{ fontSize: 12, color: S.textMuted, marginBottom: 10, fontWeight: 600 }}>🔌 API 연동 상태</div>
             {[
+              ["Supabase", syncStatus, syncStatus.includes("실패") ? "#e63946" : "#3F72AF"],
               ["KIS 국내주식 API", "준비완료 (키 필요)", "#3F72AF"],
               ["Yahoo Finance / Alpha Vantage", "준비완료 (키 필요)", "#3F72AF"],
               ["CoinGecko 암호화폐", "준비완료 (무료)", "#3F72AF"],
               ["환율 API (open.er-api)", "준비완료 (무료)", "#3F72AF"],
             ].map(([name, status, color], i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < 3 ? "1px solid rgba(180,185,200,0.15)" : "none" }}>
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < 4 ? "1px solid rgba(180,185,200,0.15)" : "none" }}>
                 <span style={{ fontSize: 12, color: S.textSecondary }}>{name}</span>
                 <span style={{ fontSize: 11, fontWeight: 600, color, padding: "2px 8px", background: "rgba(63,114,175,0.1)", borderRadius: 4 }}>{status}</span>
               </div>
@@ -1413,7 +1600,7 @@ export default function GoldenFuture() {
         <AddAssetModal
           owner={showAdd.owner}
           defaultMarket={showAdd.market || null}
-          onAdd={(asset) => setAssets((prev) => [...prev, asset])}
+          onAdd={handleAddAsset}
           onClose={() => setShowAdd(null)}
         />
       )}
@@ -1425,6 +1612,24 @@ export default function GoldenFuture() {
           onConfirm={handleSell}
           onClose={() => setSellTarget(null)}
         />
+      )}
+
+      {saveLogs.length > 0 && (
+        <div style={{
+          position: "fixed",
+          right: 16,
+          bottom: 16,
+          zIndex: 1100,
+          width: "min(360px, calc(100vw - 32px))",
+          display: "grid",
+          gap: 8,
+        }}>
+          {saveLogs.map((log, idx) => (
+            <div key={idx} style={{ ...S.glass, padding: "10px 12px", fontSize: 12, color: S.textPrimary, borderRadius: 12 }}>
+              {log}
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Footer */}
