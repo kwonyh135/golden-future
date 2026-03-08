@@ -19,45 +19,45 @@ import {
    Blue Tone Design System & Config
    ═══════════════════════════════════════════ */
 const S = {
-  bg: "#F9F7F7",
+  bg: "linear-gradient(180deg, #f5f7fb 0%, #eef2f8 100%)",
   card: {
-    background: "#F9F7F7",
-    boxShadow: "8px 8px 20px rgba(17,45,78,0.2), -4px -4px 12px rgba(255,255,255,0.9)",
-    borderRadius: 20,
-    border: "1px solid rgba(219,226,239,0.6)",
+    background: "rgba(255,255,255,0.78)",
+    boxShadow: "0 14px 32px rgba(15,23,42,0.08)",
+    borderRadius: 24,
+    border: "1px solid rgba(255,255,255,0.85)",
   },
   inset: {
-    background: "#DBE2EF",
-    boxShadow: "inset 3px 3px 8px rgba(17,45,78,0.1), inset -2px -2px 6px rgba(255,255,255,0.8)",
+    background: "rgba(238,243,251,0.9)",
+    boxShadow: "inset 0 1px 3px rgba(148,163,184,0.25)",
     borderRadius: 14,
-    border: "1px solid rgba(219,226,239,0.4)",
+    border: "1px solid rgba(226,232,240,0.9)",
   },
   btn: {
-    background: "#F9F7F7",
-    boxShadow: "4px 4px 12px rgba(17,45,78,0.15), -2px -2px 8px rgba(255,255,255,0.8)",
-    borderRadius: 12,
-    border: "1px solid rgba(219,226,239,0.4)",
+    background: "rgba(255,255,255,0.78)",
+    boxShadow: "0 6px 16px rgba(15,23,42,0.07)",
+    borderRadius: 14,
+    border: "1px solid rgba(226,232,240,0.9)",
     cursor: "pointer",
-    transition: "all 0.12s ease",
+    transition: "all 0.18s ease",
   },
   btnPress: {
-    background: "#DBE2EF",
-    boxShadow: "inset 2px 2px 6px rgba(17,45,78,0.1), inset -2px -2px 6px rgba(255,255,255,0.7)",
+    background: "rgba(219,234,254,0.9)",
+    boxShadow: "inset 0 1px 2px rgba(59,130,246,0.2)",
   },
-  accent: "#3F72AF",
-  accentGrad: "linear-gradient(135deg, #2d5a8c, #3F72AF, #2d5a8c)",
-  accentLight: "#5a8fc7",
-  textPrimary: "#112D4E",
-  textSecondary: "#3F72AF",
-  textMuted: "#6b7085",
+  accent: "#2563eb",
+  accentGrad: "linear-gradient(135deg, #1d4ed8, #2563eb, #3b82f6)",
+  accentLight: "#60a5fa",
+  textPrimary: "#0f172a",
+  textSecondary: "#1d4ed8",
+  textMuted: "#64748b",
   profit: "#e63946",
   loss: "#1e88e5",
   glass: {
-    background: "rgba(249,247,247,0.8)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
-    border: "1px solid rgba(219,226,239,0.6)",
-    borderRadius: 20,
+    background: "rgba(255,255,255,0.65)",
+    backdropFilter: "blur(24px)",
+    WebkitBackdropFilter: "blur(24px)",
+    border: "1px solid rgba(255,255,255,0.8)",
+    borderRadius: 24,
   },
 }
 
@@ -752,7 +752,7 @@ function WeeklyReview({ evaluated, grandTotal }) {
    ═══════════════════════════════════════════ */
 export default function GoldenFuture() {
   const [tab, setTab] = useState("dashboard")
-  const [selectedUser, setSelectedUser] = useState<string | null>(null)
+  const [selectedUser, setSelectedUser] = useState<"전체" | "용" | "령">("전체")
   const [showAdd, setShowAdd] = useState(null)
   const [sellTarget, setSellTarget] = useState(null) // asset being sold
   const [assets, setAssets] = useState([
@@ -801,7 +801,7 @@ export default function GoldenFuture() {
 
   const evaluated = useMemo(() => {
     const all = assets.map(evalAsset)
-    return selectedUser ? all.filter((a) => a.owner === selectedUser) : all
+    return selectedUser === "전체" ? all : all.filter((a) => a.owner === selectedUser)
   }, [assets, exchangeRate, selectedUser])
   
   const grandTotal = evaluated.reduce((s, a) => s + a.krwValue, 0)
@@ -821,8 +821,8 @@ export default function GoldenFuture() {
     { name: "암호화폐", value: marketTotal("crypto"), color: "#112D4E" },
   ].filter((d) => d.value > 0)
 
-  const contribData = selectedUser 
-    ? [] 
+  const contribData = selectedUser !== "전체"
+    ? []
     : [
         { name: "용", value: ownerTotal("용"), color: "#3F72AF" },
         { name: "령", value: ownerTotal("령"), color: "#5a8fc7" },
@@ -941,7 +941,7 @@ export default function GoldenFuture() {
     </table>
   )
 
-  const tabs = selectedUser
+  const tabs = selectedUser !== "전체"
     ? [
         ["kr", "🇰🇷 국내주식"],
         ["us", "🇺🇸 해외주식"],
@@ -956,8 +956,12 @@ export default function GoldenFuture() {
         ["insights", "리포트"],
       ];
 
+  const filteredSoldHistory = selectedUser === "전체"
+    ? soldHistory
+    : soldHistory.filter((item) => item.owner === selectedUser)
+
   // Total realized PnL from sold history
-  const totalRealizedPnl = soldHistory.reduce((s, a) => {
+  const totalRealizedPnl = filteredSoldHistory.reduce((s, a) => {
     const pnl = a.realizedPnl
     if (a.marketType === "us") return s + pnl * exchangeRate
     return s + pnl
@@ -969,13 +973,13 @@ export default function GoldenFuture() {
         minHeight: "100vh",
         background: S.bg,
         color: S.textPrimary,
-        fontFamily: "var(--font-apple-sd)",
+        fontFamily: "var(--font-apple)",
         padding: "16px",
         maxWidth: 1000,
         margin: "0 auto",
       }}
     >
-      <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Serif+KR:wght@500;700;900&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
       <style>{`
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width:6px; }
@@ -987,17 +991,17 @@ export default function GoldenFuture() {
 
       {/* User Selection Buttons */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 20 }}>
-        {["용", "령"].map((user) => (
+        {["전체", "용", "령"].map((user) => (
           <button
             key={user}
             onClick={() => {
-              if (selectedUser === user) {
-                setSelectedUser(null)
+              if (user === "전체") {
+                setSelectedUser("전체")
                 setTab("dashboard")
-              } else {
-                setSelectedUser(user)
-                setTab("kr")
+                return
               }
+              setSelectedUser(user as "용" | "령")
+              setTab("kr")
             }}
             style={{
               ...(selectedUser === user ? { ...S.btn, ...S.btnPress, color: S.accent } : S.btn),
@@ -1191,7 +1195,7 @@ export default function GoldenFuture() {
                 </div>
               </div>
               <button
-                onClick={() => setShowAdd({ owner: selectedUser || null, market: tab })}
+                onClick={() => setShowAdd({ owner: selectedUser === "전체" ? null : selectedUser, market: tab })}
                 style={{ ...S.btn, padding: "8px 16px", fontSize: 13, color: S.accent, fontWeight: 600 }}
               >
                 + 매수
@@ -1221,44 +1225,6 @@ export default function GoldenFuture() {
             <div style={{ overflowX: "auto" }}>{renderAssetTable(byMarket(tab))}</div>
           </div>
 
-          {/* Owner breakdown */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {["용", "령"].map((name) => {
-              const items = evaluated.filter((a) => a.marketType === tab && a.owner === name)
-              const total = items.reduce((s, a) => s + a.krwValue, 0)
-              const pnl = items.reduce((s, a) => s + (a.krwValue - a.krwCost), 0)
-              return (
-                <div key={name} style={{ ...S.card, padding: 18 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: name === "용" ? "#8b7355" : "#6b83a8" }}>
-                      {name === "용" ? "🐉" : "🐲"} {name}
-                    </span>
-                    <button
-                      onClick={() => setShowAdd({ owner: name, market: tab })}
-                      style={{ background: "none", border: "none", color: S.accent, cursor: "pointer", fontSize: 18, fontWeight: 700 }}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: S.textPrimary, fontFamily: "'JetBrains Mono',monospace" }}>{fmt(total)}</div>
-                  <div style={{ fontSize: 12, color: pnl >= 0 ? S.profit : S.loss, fontFamily: "'JetBrains Mono',monospace" }}>
-                    {pnl >= 0 ? "+" : ""}{fmt(pnl)}
-                  </div>
-                  <div style={{ marginTop: 8 }}>
-                    {items.map((a, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: 12, borderBottom: i < items.length - 1 ? "1px solid rgba(180,185,200,0.2)" : "none" }}>
-                        <span style={{ color: S.textPrimary }}>{a.name}</span>
-                        <span style={{ color: a.pnlPct >= 0 ? S.profit : S.loss, fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>
-                          {a.pnlPct >= 0 ? "+" : ""}{a.pnlPct.toFixed(1)}%
-                        </span>
-                      </div>
-                    ))}
-                    {items.length === 0 && <div style={{ fontSize: 12, color: S.textMuted, textAlign: "center", padding: 8 }}>종목 없음</div>}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
         </div>
       )}
 
@@ -1299,17 +1265,17 @@ export default function GoldenFuture() {
           <div style={{ ...S.card, padding: 24, marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div style={{ fontSize: 13, color: S.textMuted, fontWeight: 600 }}>📤 매도 이력</div>
-              {soldHistory.length > 0 && (
+              {filteredSoldHistory.length > 0 && (
                 <div style={{ ...S.inset, padding: "4px 12px", fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: totalRealizedPnl >= 0 ? S.profit : S.loss, fontWeight: 700 }}>
                   실현손익 합계: {totalRealizedPnl >= 0 ? "+" : ""}{fmt(totalRealizedPnl)}원
                 </div>
               )}
             </div>
 
-            {soldHistory.length === 0 ? (
+            {filteredSoldHistory.length === 0 ? (
               <div style={{ textAlign: "center", color: S.textMuted, padding: "24px 0", fontSize: 13 }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>📭</div>
-                아직 매도한 종목이 없습니다
+                해당 사용자의 매도 이력이 없습니다
               </div>
             ) : (
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 4px" }}>
@@ -1326,7 +1292,7 @@ export default function GoldenFuture() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...soldHistory].reverse().map((a, i) => {
+                  {[...filteredSoldHistory].reverse().map((a, i) => {
                     const isUs = a.marketType === "us"
                     const pnlKrw = isUs ? a.realizedPnl * exchangeRate : a.realizedPnl
                     return (
@@ -1369,7 +1335,7 @@ export default function GoldenFuture() {
           {/* Dividend Calendar */}
           <div style={{ ...S.card, padding: 24, marginBottom: 16 }}>
             <div style={{ fontSize: 13, color: S.textMuted, marginBottom: 16, fontWeight: 600 }}>📅 배당금 달력</div>
-            <DividendCalendar assets={assets} />
+            <DividendCalendar assets={selectedUser === "전체" ? assets : assets.filter((a) => a.owner === selectedUser)} />
           </div>
 
           {/* Monthly P&L */}
