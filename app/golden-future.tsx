@@ -919,11 +919,19 @@ export default function GoldenFuture() {
   const [syncStatus, setSyncStatus] = useState(hasSupabaseConfig ? "Supabase 동기화 대기" : "Supabase 환경변수 미설정 (로컬 모드)")
   const [saveLogs, setSaveLogs] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false)
+  const [isImportingBitget, setIsImportingBitget] = useState(false)
+  const assetsRef = useRef(assets)
+  const refreshingRef = useRef(false)
 
   const pushSaveLog = (msg) => {
     const t = new Date().toLocaleTimeString("ko-KR", { hour12: false })
     setSaveLogs((prev) => [`${t} · ${msg}`, ...prev].slice(0, 5))
   }
+
+  useEffect(() => {
+    assetsRef.current = assets
+  }, [assets])
 
   useEffect(() => {
     if (!hasSupabaseConfig) return
@@ -986,7 +994,147 @@ export default function GoldenFuture() {
     const all = assets.map(evalAsset)
     return selectedUser === "전체" ? all : all.filter((a) => a.owner === selectedUser)
   }, [assets, exchangeRate, selectedUser])
+
+  const refreshMarketPrices = async (source = "자동") => {
+    const baseAssets = assetsRef.current
+    if (baseAssets.length === 0 || refreshingRef.current) return
+
+    refreshingRef.current = true
+    setIsRefreshingPrices(true)
+    try {
+      const response = await fetch("/api/market-prices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assets: baseAssets.map((asset) => ({ ticker: asset.ticker, marketType: asset.marketType })),
+        }),
+      })
+
+      if (!response.ok) throw new Error("시세 API 호출 실패")
+      const payload = await response.json()
+      const prices = payload?.prices || {}
+      const nextExchangeRate = Number(payload?.exchangeRate)
+      const exchangeRateSource = payload?.exchangeRateSource
+      if (Number.isFinite(nextExchangeRate) && nextExchangeRate > 0) {
+        setExchangeRate(nextExchangeRate)
+      }
+
+      const updatedAssets = baseAssets.map((asset) => {
+        const key = `${asset.marketType}:${asset.ticker}`
+        const nextPrice = Number(prices[key])
+        if (!Number.isFinite(nextPrice) || nextPrice <= 0) return asset
+        return { ...asset, currentPrice: nextPrice }
+      })
+
+      const changedCount = updatedAssets.filter((asset, i) => asset.currentPrice !== baseAssets[i].currentPrice).length
+      if (changedCount > 0) {
+        assetsRef.current = updatedAssets
+        setAssets(updatedAssets)
+        setSyncStatus(`실시간 시세 반영 완료 (${changedCount}건)`)
+        pushSaveLog(`${source} 시세 연동: ${changedCount}건 반영 · 환율 ${Number.isFinite(nextExchangeRate) ? nextExchangeRate.toFixed(2) : exchangeRate.toFixed(2)} (${exchangeRateSource || "unknown"})`)
+      } else {
+        pushSaveLog(`${source} 시세 연동: 반영할 데이터 없음 · 환율 ${Number.isFinite(nextExchangeRate) ? nextExchangeRate.toFixed(2) : exchangeRate.toFixed(2)} (${exchangeRateSource || "unknown"})`)
+      }
+    } catch (error) {
+      console.error(error)
+      pushSaveLog(`${source} 시세 연동 실패`)
+    } finally {
+      refreshingRef.current = false
+      setIsRefreshingPrices(false)
+    }
+  }
+
+  useEffect(() => {
+    if (assetsRef.current.length === 0) return
+    refreshMarketPrices("초기")
+
+    const timer = setInterval(() => {
+      refreshMarketPrices("주기")
+    }, 60_000)
+
+    return () => clearInterval(timer)
+  }, [assets.length])
+
+  const handleImportBitgetHoldings = async ({ skipPriceRefresh = false } = {}) => {
+    if (isImportingBitget) return
+    setIsImportingBitget(true)
+
+    const owner = selectedUser === "전체" ? "용" : selectedUser
+
+    try {
+      const response = await fetch("/api/bitget-holdings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner }),
+      })
+      if (!response.ok) throw new Error("Bitget 보유 자산 조회 실패")
+
+      const payload = await response.json()
+      const imported = Array.isArray(payload?.holdings) ? payload.holdings : []
+
+      if (imported.length === 0) {
+        pushSaveLog("Bitget 보유 자산 없음 또는 API 키 확인 필요")
+        setSyncStatus("Bitget 보유 자산 없음")
+        return
+      }
+
+      setAssets((prev) => {
+        const next = [...prev]
+
+        imported.forEach((item) => {
+          const idx = next.findIndex((asset) => asset.owner === item.owner && asset.marketType === "crypto" && asset.ticker === item.ticker)
+          if (idx === -1) {
+            next.push({
+              owner: item.owner,
+              ticker: item.ticker,
+              name: item.name || item.ticker,
+              marketType: "crypto",
+              quantity: Number(item.quantity) || 0,
+              avgPrice: Number(item.avgPrice) || Number(item.currentPrice) || 0,
+              currentPrice: Number(item.currentPrice) || Number(item.avgPrice) || 0,
+            })
+            return
+          }
+
+          const target = next[idx]
+          const incomingQty = Number(item.quantity) || 0
+          const incomingAvg = Number(item.avgPrice) || Number(item.currentPrice) || target.avgPrice
+          const mergedQty = target.quantity + incomingQty
+          const mergedAvg = mergedQty > 0 ? ((target.avgPrice * target.quantity) + (incomingAvg * incomingQty)) / mergedQty : target.avgPrice
+
+          next[idx] = {
+            ...target,
+            quantity: mergedQty,
+            avgPrice: mergedAvg,
+            currentPrice: Number(item.currentPrice) || target.currentPrice,
+          }
+        })
+
+        assetsRef.current = next
+        return next
+      })
+
+      setSyncStatus(`Bitget 보유 종목 반영 완료 (${imported.length}건)`)
+      pushSaveLog(`Bitget 보유 종목 가져오기 완료: ${imported.length}건`)
+      if (!skipPriceRefresh) {
+        await refreshMarketPrices("Bitget 불러오기 후")
+      }
+    } catch (error) {
+      console.error(error)
+      setSyncStatus("Bitget 보유 종목 연동 실패")
+      pushSaveLog("Bitget 보유 종목 연동 실패: API 키/권한 확인")
+    } finally {
+      setIsImportingBitget(false)
+    }
+  }
   
+  const handleSyncAll = async () => {
+    if (isRefreshingPrices || isImportingBitget) return
+
+    await handleImportBitgetHoldings({ skipPriceRefresh: true })
+    await refreshMarketPrices("통합")
+  }
+
   const grandTotal = evaluated.reduce((s, a) => s + a.krwValue, 0)
   const totalCost = evaluated.reduce((s, a) => s + a.krwCost, 0)
   const totalPnl = grandTotal - totalCost
@@ -1260,6 +1408,19 @@ export default function GoldenFuture() {
           }}
         >
           {isSaving ? "저장 중..." : "💾 저장"}
+        </button>
+        <button
+          onClick={handleSyncAll}
+          disabled={isRefreshingPrices || isImportingBitget}
+          style={{
+            ...((isRefreshingPrices || isImportingBitget) ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: S.accent }),
+            padding: "8px 14px",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: (isRefreshingPrices || isImportingBitget) ? "wait" : "pointer",
+          }}
+        >
+          {(isRefreshingPrices || isImportingBitget) ? "동기화 중..." : "🔄 통합 동기화"}
         </button>
         {["전체", "용", "령"].map((user) => (
           <button
