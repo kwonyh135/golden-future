@@ -885,6 +885,13 @@ export default function GoldenFuture() {
   const [saveLogs, setSaveLogs] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
 
+  const [bitgetStatus, setBitgetStatus] = useState("미연결")
+  const [isBitgetSyncing, setIsBitgetSyncing] = useState(false)
+  const [bitgetHoldings, setBitgetHoldings] = useState<{
+    ticker: string; available: number; total: number; usdtPrice?: number; krwValue?: number
+  }[]>([])
+  const [bitgetUsdtBalance, setBitgetUsdtBalance] = useState(0)
+
   const pushSaveLog = (msg) => {
     const t = new Date().toLocaleTimeString("ko-KR", { hour12: false })
     setSaveLogs((prev) => [`${t} · ${msg}`, ...prev].slice(0, 5))
@@ -1060,6 +1067,52 @@ export default function GoldenFuture() {
     }
   }
 
+  const handleBitgetSync = async () => {
+    setIsBitgetSyncing(true)
+    setBitgetStatus("동기화 중...")
+    pushSaveLog("Bitget 동기화 시작")
+
+    try {
+      // 1. 실시간 가격 조회 (공개 API)
+      const pricesRes = await fetch("/api/bitget/prices")
+      const pricesData = await pricesRes.json()
+      if (!pricesRes.ok) throw new Error(pricesData.error || "가격 조회 실패")
+
+      // 암호화폐 현재가 업데이트 (USDT → KRW)
+      setAssets((prev) =>
+        prev.map((asset) => {
+          if (asset.marketType === "crypto" && pricesData.prices[asset.ticker] !== undefined) {
+            return { ...asset, currentPrice: Math.round(pricesData.prices[asset.ticker] * exchangeRate) }
+          }
+          return asset
+        })
+      )
+      pushSaveLog(`가격 업데이트: ${Object.keys(pricesData.prices).length}개 코인`)
+
+      // 2. 잔고 조회 (인증 API)
+      const holdingsRes = await fetch("/api/bitget/holdings")
+      const holdingsData = await holdingsRes.json()
+      if (!holdingsRes.ok) throw new Error(holdingsData.error || "잔고 조회 실패")
+
+      const enriched = (holdingsData.holdings || []).map((h: any) => ({
+        ...h,
+        usdtPrice: pricesData.prices[h.ticker] || 0,
+        krwValue: Math.round((pricesData.prices[h.ticker] || 0) * h.total * exchangeRate),
+      }))
+      setBitgetHoldings(enriched)
+      setBitgetUsdtBalance(holdingsData.usdtBalance || 0)
+
+      const time = new Date().toLocaleTimeString("ko-KR", { hour12: false })
+      setBitgetStatus(`동기화 완료 ${time}`)
+      pushSaveLog(`Bitget 잔고 ${holdingsData.holdings?.length || 0}개 코인`)
+    } catch (error: any) {
+      setBitgetStatus(`실패: ${error.message}`)
+      pushSaveLog(`Bitget 동기화 실패: ${error.message}`)
+    } finally {
+      setIsBitgetSyncing(false)
+    }
+  }
+
   // Asset table with avgPrice column + monetary PnL + 매도 button
   const renderAssetTable = (items) => (
     <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 3px" }}>
@@ -1198,6 +1251,19 @@ export default function GoldenFuture() {
 
       {/* User Selection Buttons */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 20 }}>
+        <button
+          onClick={handleBitgetSync}
+          disabled={isBitgetSyncing}
+          style={{
+            ...(isBitgetSyncing ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: "#f59e0b" }),
+            padding: "8px 14px",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: isBitgetSyncing ? "wait" : "pointer",
+          }}
+        >
+          {isBitgetSyncing ? "동기화 중..." : "⚡ Bitget"}
+        </button>
         <button
           onClick={handleSaveToSupabase}
           disabled={isSaving}
@@ -1445,6 +1511,53 @@ export default function GoldenFuture() {
             <div style={{ overflowX: "auto" }}>{renderAssetTable(byMarket(tab))}</div>
           </div>
 
+          {/* Bitget 잔고 카드 - 암호화폐 탭에서만 표시 */}
+          {tab === "crypto" && bitgetHoldings.length > 0 && (
+            <div style={{ ...S.card, padding: 24, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: S.textPrimary }}>⚡ Bitget 잔고</div>
+                  <div style={{ fontSize: 11, color: S.textMuted, marginTop: 2 }}>{bitgetStatus}</div>
+                </div>
+                {bitgetUsdtBalance > 0 && (
+                  <div style={{ ...S.inset, padding: "6px 12px", fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: S.textSecondary }}>
+                    USDT {bitgetUsdtBalance.toFixed(2)}
+                  </div>
+                )}
+              </div>
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 3px" }}>
+                <thead>
+                  <tr style={{ fontSize: 11, color: S.textMuted }}>
+                    <td style={{ padding: "6px 10px" }}>코인</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right" }}>보유량</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right" }}>현재가 (USDT)</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right" }}>평가금액 (KRW)</td>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bitgetHoldings.map((h, i) => (
+                    <tr key={i} style={{ background: "rgba(255,255,255,0.35)", borderRadius: 10 }}>
+                      <td style={{ padding: "10px 10px", borderRadius: "10px 0 0 10px" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: S.textPrimary, fontFamily: "'JetBrains Mono',monospace" }}>
+                          {h.ticker}
+                        </span>
+                      </td>
+                      <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: S.textSecondary }}>
+                        {h.total.toLocaleString(undefined, { maximumSignificantDigits: 8 })}
+                      </td>
+                      <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: S.textMuted }}>
+                        ${(h.usdtPrice || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                      </td>
+                      <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 600, color: S.textPrimary, borderRadius: "0 10px 10px 0" }}>
+                        {fmt(h.krwValue || 0)}원
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
         </div>
       )}
 
@@ -1581,12 +1694,13 @@ export default function GoldenFuture() {
             <div style={{ fontSize: 12, color: S.textMuted, marginBottom: 10, fontWeight: 600 }}>🔌 API 연동 상태</div>
             {[
               ["Supabase", syncStatus, syncStatus.includes("실패") ? "#e63946" : "#3F72AF"],
+              ["Bitget API", bitgetStatus, bitgetStatus.includes("실패") ? "#e63946" : bitgetStatus === "미연결" ? "#94a3b8" : "#f59e0b"],
               ["KIS 국내주식 API", "준비완료 (키 필요)", "#3F72AF"],
               ["Yahoo Finance / Alpha Vantage", "준비완료 (키 필요)", "#3F72AF"],
               ["CoinGecko 암호화폐", "준비완료 (무료)", "#3F72AF"],
               ["환율 API (open.er-api)", "준비완료 (무료)", "#3F72AF"],
             ].map(([name, status, color], i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < 4 ? "1px solid rgba(180,185,200,0.15)" : "none" }}>
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < 5 ? "1px solid rgba(180,185,200,0.15)" : "none" }}>
                 <span style={{ fontSize: 12, color: S.textSecondary }}>{name}</span>
                 <span style={{ fontSize: 11, fontWeight: 600, color, padding: "2px 8px", background: "rgba(63,114,175,0.1)", borderRadius: 4 }}>{status}</span>
               </div>
