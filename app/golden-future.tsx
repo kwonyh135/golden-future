@@ -901,6 +901,8 @@ export default function GoldenFuture() {
   const [soldHistory, setSoldHistory] = useState([])
   const [syncStatus, setSyncStatus] = useState(hasSupabaseConfig ? "Supabase 동기화 대기" : "Supabase 환경변수 미설정 (로컬 모드)")
   const [saveLogs, setSaveLogs] = useState<string[]>([])
+  const [toastLogs, setToastLogs] = useState<{ id: number; msg: string }[]>([])
+  const [showLogPanel, setShowLogPanel] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   const [bitgetStatus, setBitgetStatus] = useState("미연결")
@@ -912,7 +914,11 @@ export default function GoldenFuture() {
 
   const pushSaveLog = (msg) => {
     const t = new Date().toLocaleTimeString("ko-KR", { hour12: false })
-    setSaveLogs((prev) => [`${t} · ${msg}`, ...prev].slice(0, 5))
+    const entry = `${t} · ${msg}`
+    setSaveLogs((prev) => [entry, ...prev].slice(0, 50))
+    const id = Date.now()
+    setToastLogs((prev) => [...prev, { id, msg: entry }])
+    setTimeout(() => setToastLogs((prev) => prev.filter((l) => l.id !== id)), 30000)
   }
 
   useEffect(() => {
@@ -1133,9 +1139,14 @@ export default function GoldenFuture() {
     }
   }
 
-  // 페이지 로드 시 Bitget 자동 동기화
+  const handleSyncAll = async () => {
+    await handleBitgetSync()
+    await handleSaveToSupabase()
+  }
+
+  // 페이지 로드 시 자동 동기화
   useEffect(() => {
-    handleBitgetSync()
+    handleSyncAll()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1278,30 +1289,17 @@ export default function GoldenFuture() {
       {/* User Selection Buttons */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 20 }}>
         <button
-          onClick={handleBitgetSync}
-          disabled={isBitgetSyncing}
+          onClick={handleSyncAll}
+          disabled={isBitgetSyncing || isSaving}
           style={{
-            ...(isBitgetSyncing ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: "#f59e0b" }),
-            padding: "8px 14px",
+            ...((isBitgetSyncing || isSaving) ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: S.accent }),
+            padding: "8px 16px",
             fontSize: 13,
             fontWeight: 700,
-            cursor: isBitgetSyncing ? "wait" : "pointer",
+            cursor: (isBitgetSyncing || isSaving) ? "wait" : "pointer",
           }}
         >
-          {isBitgetSyncing ? "동기화 중..." : "⚡ Bitget"}
-        </button>
-        <button
-          onClick={handleSaveToSupabase}
-          disabled={isSaving}
-          style={{
-            ...(isSaving ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: S.accent }),
-            padding: "8px 14px",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: isSaving ? "wait" : "pointer",
-          }}
-        >
-          {isSaving ? "저장 중..." : "💾 저장"}
+          {(isBitgetSyncing || isSaving) ? "동기화 중..." : "🔄 동기화"}
         </button>
         {["전체", "용", "령"].map((user) => (
           <button
@@ -1754,21 +1752,58 @@ export default function GoldenFuture() {
         />
       )}
 
-      {saveLogs.length > 0 && (
+      {/* 토스트 로그 (30초 자동 소멸) */}
+      {toastLogs.length > 0 && (
         <div style={{
-          position: "fixed",
-          right: 16,
-          bottom: 16,
-          zIndex: 1100,
-          width: "min(360px, calc(100vw - 32px))",
-          display: "grid",
-          gap: 8,
+          position: "fixed", right: 16, bottom: 64,
+          zIndex: 1100, width: "min(340px, calc(100vw - 32px))",
+          display: "flex", flexDirection: "column", gap: 6,
+          pointerEvents: "none",
         }}>
-          {saveLogs.map((log, idx) => (
-            <div key={idx} style={{ ...S.glass, padding: "10px 12px", fontSize: 12, color: S.textPrimary, borderRadius: 12 }}>
-              {log}
+          {toastLogs.map((l) => (
+            <div key={l.id} style={{ ...S.glass, padding: "9px 13px", fontSize: 12, color: S.textPrimary, borderRadius: 12 }}>
+              {l.msg}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 로그 버튼 (항상 표시) */}
+      <button
+        onClick={() => setShowLogPanel((v) => !v)}
+        style={{
+          position: "fixed", right: 16, bottom: 16, zIndex: 1200,
+          ...S.btn, padding: "8px 14px", fontSize: 12, fontWeight: 700,
+          color: showLogPanel ? S.accent : S.textMuted,
+          border: showLogPanel ? `1px solid ${S.accent}` : "1px solid rgba(226,232,240,0.9)",
+        }}
+      >
+        📋 로그
+      </button>
+
+      {/* 로그 패널 */}
+      {showLogPanel && (
+        <div style={{
+          position: "fixed", right: 16, bottom: 56, zIndex: 1150,
+          width: "min(380px, calc(100vw - 32px))",
+          ...S.glass, background: "rgba(249,247,247,0.97)",
+          boxShadow: "0 8px 32px rgba(15,23,42,0.15)",
+          borderRadius: 16, overflow: "hidden",
+        }}>
+          <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid rgba(180,185,200,0.25)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: S.textPrimary }}>📋 시스템 로그</span>
+            <button onClick={() => setShowLogPanel(false)} style={{ background: "none", border: "none", color: S.textMuted, fontSize: 16, cursor: "pointer" }}>✕</button>
+          </div>
+          <div style={{ maxHeight: 280, overflowY: "auto", padding: "8px 12px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+            {saveLogs.length === 0
+              ? <div style={{ textAlign: "center", color: S.textMuted, padding: 20, fontSize: 12 }}>로그가 없습니다</div>
+              : saveLogs.map((log, idx) => (
+                <div key={idx} style={{ fontSize: 11, color: idx === 0 ? S.textPrimary : S.textMuted, padding: "5px 8px", borderRadius: 8, background: idx === 0 ? "rgba(63,114,175,0.07)" : "transparent", fontFamily: "'JetBrains Mono',monospace" }}>
+                  {log}
+                </div>
+              ))
+            }
+          </div>
         </div>
       )}
 
