@@ -232,7 +232,7 @@ function SellModal({ asset, onConfirm, onClose }) {
   const cost = asset.avgPrice * sellQuantity
   const pnl = proceeds - cost
   const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0
-  const isUs = asset.marketType === "us"
+  const isUs = asset.marketType === "us" || asset.marketType === "crypto"
 
   const handleConfirm = () => {
     if (!sellPrice || price <= 0 || sellQuantity <= 0) return
@@ -648,7 +648,9 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
                 </div>
               </div>
               <div>
-                <label style={{ color: S.textMuted, fontSize: 11, marginBottom: 3, display: "block" }}>평단가</label>
+                <label style={{ color: S.textMuted, fontSize: 11, marginBottom: 3, display: "block" }}>
+                  평단가 ({marketType === "kr" ? "KRW" : "USD"})
+                </label>
                 <div style={{ ...S.inset, padding: "10px 14px" }}>
                   <input
                     value={avg} onChange={(e) => setAvg(e.target.value)} type="number" placeholder="0"
@@ -950,8 +952,10 @@ export default function GoldenFuture() {
   const evalAsset = (a) => {
     const val = a.quantity * a.currentPrice
     const cost = a.quantity * a.avgPrice
-    const krw = a.marketType === "us" ? val * exchangeRate : val
-    const krwC = a.marketType === "us" ? cost * exchangeRate : cost
+    // us, crypto는 USD 기준 → KRW 환산
+    const isUsd = a.marketType === "us" || a.marketType === "crypto"
+    const krw = isUsd ? val * exchangeRate : val
+    const krwC = isUsd ? cost * exchangeRate : cost
     return {
       ...a,
       value: val,
@@ -1106,7 +1110,8 @@ export default function GoldenFuture() {
       setAssets((prev) =>
         prev.map((asset) => {
           if (asset.marketType === "crypto" && pricesData.prices[asset.ticker] !== undefined) {
-            return { ...asset, currentPrice: Math.round(pricesData.prices[asset.ticker] * exchangeRate) }
+            // crypto currentPrice는 USD(USDT) 기준으로 저장
+            return { ...asset, currentPrice: pricesData.prices[asset.ticker] }
           }
           return asset
         })
@@ -1168,7 +1173,9 @@ export default function GoldenFuture() {
       <tbody>
         {items.map((a, i) => {
           const isUs = a.marketType === "us"
-          const pnlKrw = isUs ? a.pnl * exchangeRate : a.pnl
+          const isCrypto = a.marketType === "crypto"
+          const isUsd = isUs || isCrypto  // USD 기준 자산
+          const pnlKrw = isUsd ? a.pnl * exchangeRate : a.pnl
           return (
             <tr key={i} style={{ background: "rgba(255,255,255,0.35)", borderRadius: 10 }}>
               <td style={{ padding: "10px 10px", borderRadius: "10px 0 0 10px" }}>
@@ -1188,23 +1195,23 @@ export default function GoldenFuture() {
               </td>
               {/* 평단가 */}
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: S.textMuted }}>
-                {isUs ? `$${a.avgPrice.toLocaleString()}` : `${a.avgPrice.toLocaleString()}`}
+                {isUsd ? `$${a.avgPrice.toLocaleString()}` : `${a.avgPrice.toLocaleString()}원`}
               </td>
               {/* 현재가 */}
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: S.textSecondary }}>
-                {isUs ? `$${a.currentPrice.toLocaleString()}` : a.currentPrice.toLocaleString()}
+                {isUsd ? `$${a.currentPrice.toLocaleString()}` : `${a.currentPrice.toLocaleString()}원`}
               </td>
-              {/* 평가금액 */}
+              {/* 평가금액 (USD) */}
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: S.textPrimary, fontWeight: 600 }}>
-                {isUs ? fmtU(a.value) : fmt(a.value)}
+                {isUsd ? fmtU(a.value) : `${fmt(a.value)}원`}
               </td>
               {/* 수익률 */}
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 700, color: a.pnlPct >= 0 ? S.profit : S.loss }}>
                 {a.pnlPct >= 0 ? "+" : ""}{a.pnlPct.toFixed(1)}%
               </td>
-              {/* 손익금액 */}
+              {/* 손익금액 (원화) */}
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 600, color: pnlKrw >= 0 ? S.profit : S.loss, borderRadius: "0 10px 10px 0" }}>
-                {pnlKrw >= 0 ? "+" : ""}{fmt(pnlKrw)}
+                {pnlKrw >= 0 ? "+" : ""}{fmt(pnlKrw)}원
               </td>
               {/* 매도 버튼 */}
               <td style={{ padding: "4px 8px", textAlign: "center" }}>
