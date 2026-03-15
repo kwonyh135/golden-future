@@ -286,7 +286,7 @@ function SellModal({ asset, onConfirm, onClose }) {
   const cost = asset.avgPrice * sellQuantity
   const pnl = proceeds - cost
   const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0
-  const isUs = asset.marketType === "us"
+  const isUs = asset.marketType === "us" || asset.marketType === "crypto"
 
   const handleConfirm = () => {
     if (!sellPrice || price <= 0 || sellQuantity <= 0) return
@@ -652,7 +652,7 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
                       ...S.btn, flex: 1, padding: "10px",
                       color: selectedOwner === o ? S.accent : S.textMuted,
                       fontWeight: selectedOwner === o ? 700 : 400,
-                      borderColor: selectedOwner === o ? S.accent : "transparent",
+                      border: selectedOwner === o ? `1px solid ${S.accent}` : "1px solid transparent",
                     }}
                   >
                     {o === "용" ? "🐉" : "🐲"} {o}
@@ -702,7 +702,9 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
                 </div>
               </div>
               <div>
-                <label style={{ color: S.textMuted, fontSize: 11, marginBottom: 3, display: "block" }}>평단가</label>
+                <label style={{ color: S.textMuted, fontSize: 11, marginBottom: 3, display: "block" }}>
+                  평단가 ({marketType === "kr" ? "KRW" : "USD"})
+                </label>
                 <div style={{ ...S.inset, padding: "10px 14px" }}>
                   <input
                     value={avg} onChange={(e) => setAvg(e.target.value)} type="number" placeholder="0"
@@ -949,12 +951,14 @@ export default function GoldenFuture() {
   const [selectedUser, setSelectedUser] = useState<"전체" | "용" | "령">("전체")
   const [showAdd, setShowAdd] = useState(null)
   const [sellTarget, setSellTarget] = useState(null) // asset being sold
-  const [assets, setAssets] = useState(hasSupabaseConfig ? [] : INITIAL_ASSETS)
+  const [assets, setAssets] = useState([])
 
   // Sold assets history
   const [soldHistory, setSoldHistory] = useState(hasSupabaseConfig ? [] : INITIAL_SOLD_HISTORY)
   const [syncStatus, setSyncStatus] = useState(hasSupabaseConfig ? "Supabase 동기화 대기" : "Supabase 환경변수 미설정 (로컬 모드)")
   const [saveLogs, setSaveLogs] = useState<string[]>([])
+  const [toastLogs, setToastLogs] = useState<{ id: number; msg: string }[]>([])
+  const [showLogPanel, setShowLogPanel] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false)
   const [isImportingBitget, setIsImportingBitget] = useState(false)
@@ -970,7 +974,11 @@ export default function GoldenFuture() {
 
   const pushSaveLog = (msg) => {
     const t = new Date().toLocaleTimeString("ko-KR", { hour12: false })
-    setSaveLogs((prev) => [`${t} · ${msg}`, ...prev].slice(0, 5))
+    const entry = `${t} · ${msg}`
+    setSaveLogs((prev) => [entry, ...prev].slice(0, 50))
+    const id = Date.now()
+    setToastLogs((prev) => [...prev, { id, msg: entry }])
+    setTimeout(() => setToastLogs((prev) => prev.filter((l) => l.id !== id)), 30000)
   }
 
   useEffect(() => {
@@ -1021,8 +1029,10 @@ export default function GoldenFuture() {
   const evalAsset = (a) => {
     const val = a.quantity * a.currentPrice
     const cost = a.quantity * a.avgPrice
-    const krw = a.marketType === "us" ? val * exchangeRate : val
-    const krwC = a.marketType === "us" ? cost * exchangeRate : cost
+    // us, crypto는 USD 기준 → KRW 환산
+    const isUsd = a.marketType === "us" || a.marketType === "crypto"
+    const krw = isUsd ? val * exchangeRate : val
+    const krwC = isUsd ? cost * exchangeRate : cost
     return {
       ...a,
       value: val,
@@ -1317,7 +1327,8 @@ export default function GoldenFuture() {
       setAssets((prev) =>
         prev.map((asset) => {
           if (asset.marketType === "crypto" && pricesData.prices[asset.ticker] !== undefined) {
-            return { ...asset, currentPrice: Math.round(pricesData.prices[asset.ticker] * exchangeRate) }
+            // crypto currentPrice는 USD(USDT) 기준으로 저장
+            return { ...asset, currentPrice: pricesData.prices[asset.ticker] }
           }
           return asset
         })
@@ -1329,11 +1340,13 @@ export default function GoldenFuture() {
       const holdingsData = await holdingsRes.json()
       if (!holdingsRes.ok) throw new Error(holdingsData.error || "잔고 조회 실패")
 
-      const enriched = (holdingsData.holdings || []).map((h: any) => ({
-        ...h,
-        usdtPrice: pricesData.prices[h.ticker] || 0,
-        krwValue: Math.round((pricesData.prices[h.ticker] || 0) * h.total * exchangeRate),
-      }))
+      const enriched = (holdingsData.holdings || [])
+        .map((h: any) => ({
+          ...h,
+          usdtPrice: pricesData.prices[h.ticker] || 0,
+          krwValue: Math.round((pricesData.prices[h.ticker] || 0) * h.total * exchangeRate),
+        }))
+        .filter((h: any) => h.krwValue >= 1000) // 1,000원 미만 dust 제거
       setBitgetHoldings(enriched)
       setBitgetUsdtBalance(holdingsData.usdtBalance || 0)
 
@@ -1348,9 +1361,14 @@ export default function GoldenFuture() {
     }
   }
 
-  // 페이지 로드 시 Bitget 자동 동기화
+  const handleSyncAll = async () => {
+    await handleBitgetSync()
+    await handleSaveToSupabase()
+  }
+
+  // 페이지 로드 시 자동 동기화
   useEffect(() => {
-    handleBitgetSync()
+    handleSyncAll()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1372,7 +1390,9 @@ export default function GoldenFuture() {
       <tbody>
         {items.map((a, i) => {
           const isUs = a.marketType === "us"
-          const pnlKrw = isUs ? a.pnl * exchangeRate : a.pnl
+          const isCrypto = a.marketType === "crypto"
+          const isUsd = isUs || isCrypto  // USD 기준 자산
+          const pnlKrw = isUsd ? a.pnl * exchangeRate : a.pnl
           return (
             <tr key={i} style={{ background: "rgba(255,255,255,0.35)", borderRadius: 10 }}>
               <td style={{ padding: "10px 10px", borderRadius: "10px 0 0 10px" }}>
@@ -1392,23 +1412,23 @@ export default function GoldenFuture() {
               </td>
               {/* 평단가 */}
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: S.textMuted }}>
-                {isUs ? `$${a.avgPrice.toLocaleString()}` : `${a.avgPrice.toLocaleString()}`}
+                {isUsd ? `$${a.avgPrice.toLocaleString()}` : `${a.avgPrice.toLocaleString()}원`}
               </td>
               {/* 현재가 */}
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: S.textSecondary }}>
-                {isUs ? `$${a.currentPrice.toLocaleString()}` : a.currentPrice.toLocaleString()}
+                {isUsd ? `$${a.currentPrice.toLocaleString()}` : `${a.currentPrice.toLocaleString()}원`}
               </td>
-              {/* 평가금액 */}
+              {/* 평가금액 (USD) */}
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: S.textPrimary, fontWeight: 600 }}>
-                {isUs ? fmtU(a.value) : fmt(a.value)}
+                {isUsd ? fmtU(a.value) : `${fmt(a.value)}원`}
               </td>
               {/* 수익률 */}
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 700, color: a.pnlPct >= 0 ? S.profit : S.loss }}>
                 {a.pnlPct >= 0 ? "+" : ""}{a.pnlPct.toFixed(1)}%
               </td>
-              {/* 손익금액 */}
+              {/* 손익금액 (원화) */}
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 600, color: pnlKrw >= 0 ? S.profit : S.loss, borderRadius: "0 10px 10px 0" }}>
-                {pnlKrw >= 0 ? "+" : ""}{fmt(pnlKrw)}
+                {pnlKrw >= 0 ? "+" : ""}{fmt(pnlKrw)}원
               </td>
               {/* 매도 버튼 */}
               <td style={{ padding: "4px 8px", textAlign: "center" }}>
@@ -1493,30 +1513,17 @@ export default function GoldenFuture() {
       {/* User Selection Buttons */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 20 }}>
         <button
-          onClick={handleBitgetSync}
-          disabled={isBitgetSyncing}
+          onClick={handleSyncAll}
+          disabled={isBitgetSyncing || isSaving}
           style={{
-            ...(isBitgetSyncing ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: "#f59e0b" }),
-            padding: "8px 14px",
+            ...((isBitgetSyncing || isSaving) ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: S.accent }),
+            padding: "8px 16px",
             fontSize: 13,
             fontWeight: 700,
-            cursor: isBitgetSyncing ? "wait" : "pointer",
+            cursor: (isBitgetSyncing || isSaving) ? "wait" : "pointer",
           }}
         >
-          {isBitgetSyncing ? "동기화 중..." : "⚡ Bitget"}
-        </button>
-        <button
-          onClick={handleSaveToSupabase}
-          disabled={isSaving}
-          style={{
-            ...(isSaving ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: S.accent }),
-            padding: "8px 14px",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: isSaving ? "wait" : "pointer",
-          }}
-        >
-          {isSaving ? "저장 중..." : "💾 저장"}
+          {(isBitgetSyncing || isSaving) ? "동기화 중..." : "🔄 동기화"}
         </button>
         <button
           onClick={handleSyncAll}
@@ -1566,7 +1573,7 @@ export default function GoldenFuture() {
             onClick={() => setTab(key)}
             style={{
               ...(tab === key
-                ? { ...S.btn, ...S.btnPress, color: S.accent, borderColor: `rgba(63,114,175,0.25)` }
+                ? { ...S.btn, ...S.btnPress, color: S.accent, border: `1px solid rgba(63,114,175,0.25)` }
                 : { ...S.btn, color: S.textSecondary }),
               padding: "9px 18px", fontSize: 12, fontWeight: 600,
             }}
@@ -1982,21 +1989,58 @@ export default function GoldenFuture() {
         />
       )}
 
-      {saveLogs.length > 0 && (
+      {/* 토스트 로그 (30초 자동 소멸) */}
+      {toastLogs.length > 0 && (
         <div style={{
-          position: "fixed",
-          right: 16,
-          bottom: 16,
-          zIndex: 1100,
-          width: "min(360px, calc(100vw - 32px))",
-          display: "grid",
-          gap: 8,
+          position: "fixed", right: 16, bottom: 64,
+          zIndex: 1100, width: "min(340px, calc(100vw - 32px))",
+          display: "flex", flexDirection: "column", gap: 6,
+          pointerEvents: "none",
         }}>
-          {saveLogs.map((log, idx) => (
-            <div key={idx} style={{ ...S.glass, padding: "10px 12px", fontSize: 12, color: S.textPrimary, borderRadius: 12 }}>
-              {log}
+          {toastLogs.map((l) => (
+            <div key={l.id} style={{ ...S.glass, padding: "9px 13px", fontSize: 12, color: S.textPrimary, borderRadius: 12 }}>
+              {l.msg}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 로그 버튼 (항상 표시) */}
+      <button
+        onClick={() => setShowLogPanel((v) => !v)}
+        style={{
+          position: "fixed", right: 16, bottom: 16, zIndex: 1200,
+          ...S.btn, padding: "8px 14px", fontSize: 12, fontWeight: 700,
+          color: showLogPanel ? S.accent : S.textMuted,
+          border: showLogPanel ? `1px solid ${S.accent}` : "1px solid rgba(226,232,240,0.9)",
+        }}
+      >
+        📋 로그
+      </button>
+
+      {/* 로그 패널 */}
+      {showLogPanel && (
+        <div style={{
+          position: "fixed", right: 16, bottom: 56, zIndex: 1150,
+          width: "min(380px, calc(100vw - 32px))",
+          ...S.glass, background: "rgba(249,247,247,0.97)",
+          boxShadow: "0 8px 32px rgba(15,23,42,0.15)",
+          borderRadius: 16, overflow: "hidden",
+        }}>
+          <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid rgba(180,185,200,0.25)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: S.textPrimary }}>📋 시스템 로그</span>
+            <button onClick={() => setShowLogPanel(false)} style={{ background: "none", border: "none", color: S.textMuted, fontSize: 16, cursor: "pointer" }}>✕</button>
+          </div>
+          <div style={{ maxHeight: 280, overflowY: "auto", padding: "8px 12px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+            {saveLogs.length === 0
+              ? <div style={{ textAlign: "center", color: S.textMuted, padding: 20, fontSize: 12 }}>로그가 없습니다</div>
+              : saveLogs.map((log, idx) => (
+                <div key={idx} style={{ fontSize: 11, color: idx === 0 ? S.textPrimary : S.textMuted, padding: "5px 8px", borderRadius: 8, background: idx === 0 ? "rgba(63,114,175,0.07)" : "transparent", fontFamily: "'JetBrains Mono',monospace" }}>
+                  {log}
+                </div>
+              ))
+            }
+          </div>
         </div>
       )}
 
