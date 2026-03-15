@@ -576,15 +576,20 @@ function StockSearch({ marketType, onSelect, onClose }) {
   )
 }
 
-function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
-  const [step, setStep] = useState(defaultMarket === "cash" ? "cash" : defaultMarket ? "search" : "type")
+function AddAssetModal({ owner, defaultMarket, cashFor, onAdd, onClose }) {
+  // cashFor: "kr" | "us" | "crypto" — 어느 계좌의 현금인지
+  const CASH_TICKER_MAP = { kr: "KRW", us: "USD", crypto: "USDT" }
+  const CASH_NAME_MAP = { kr: "원화 현금", us: "달러 현금", crypto: "USDT 현금" }
+  const fixedCashCurrency = cashFor ? CASH_TICKER_MAP[cashFor] : null
+
+  const [step, setStep] = useState(cashFor ? "cash" : defaultMarket === "cash" ? "cash" : defaultMarket ? "search" : "type")
   const [marketType, setMarketType] = useState(defaultMarket || null)
   const [selected, setSelected] = useState(null)
   const [qty, setQty] = useState("")
   const [avg, setAvg] = useState("")
   const [leverage, setLeverage] = useState(1)
   const [selectedOwner, setSelectedOwner] = useState(owner || "용")
-  const [cashCurrency, setCashCurrency] = useState("KRW")
+  const [cashCurrency, setCashCurrency] = useState(fixedCashCurrency || "KRW")
   const [cashAmount, setCashAmount] = useState("")
 
   const handleSelect = (item) => { setSelected(item); setStep("detail") }
@@ -602,14 +607,18 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
   const handleAddCash = () => {
     const amount = parseFloat(cashAmount)
     if (!amount || amount <= 0) return
+    const curName = cashFor
+      ? CASH_NAME_MAP[cashFor]
+      : cashCurrency === "KRW" ? "원화 현금" : cashCurrency === "USDT" ? "USDT 현금" : "달러 현금"
     onAdd({
       owner: selectedOwner,
       ticker: cashCurrency,
-      name: cashCurrency === "KRW" ? "원화 현금" : "달러 현금",
+      name: curName,
       marketType: "cash",
       quantity: amount,
       avgPrice: 1,
       currentPrice: 1,
+      leverage: 1,
     })
     onClose()
   }
@@ -667,13 +676,12 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
               ["kr", "🇰🇷 국내 주식", "코드 / 이름 검색"],
               ["us", "🇺🇸 해외 주식", "Ticker / Name"],
               ["crypto", "🪙 암호화폐", "Symbol / Name"],
-              ["cash", "💵 현금", "원화 / 달러"],
             ].map(([t, l, sub]) => (
               <button
                 key={t}
                 onClick={() => {
                   setMarketType(t)
-                  setStep(t === "cash" ? "cash" : "search")
+                  setStep("search")
                 }}
                 style={{
                   ...S.btn, padding: "15px 18px",
@@ -692,27 +700,38 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
 
         {step === "cash" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {/* 통화 선택 */}
-            <div style={{ display: "flex", gap: 10 }}>
-              {[["KRW", "🇰🇷 원화 (KRW)"], ["USD", "🇺🇸 달러 (USD)"]].map(([cur, label]) => (
-                <button
-                  key={cur}
-                  onClick={() => setCashCurrency(cur)}
-                  style={{
-                    ...S.btn, flex: 1, padding: "12px 10px", fontSize: 13,
-                    color: cashCurrency === cur ? S.accent : S.textMuted,
-                    fontWeight: cashCurrency === cur ? 700 : 400,
-                    border: cashCurrency === cur ? `1px solid ${S.accent}` : "1px solid transparent",
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* 통화 표시 (cashFor가 있으면 고정, 없으면 선택) */}
+            {fixedCashCurrency ? (
+              <div style={{ ...S.inset, padding: "12px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 16 }}>
+                  {fixedCashCurrency === "KRW" ? "🇰🇷" : fixedCashCurrency === "USDT" ? "🪙" : "🇺🇸"}
+                </span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: S.textPrimary }}>
+                  {fixedCashCurrency === "KRW" ? "원화 (KRW)" : fixedCashCurrency === "USDT" ? "USDT" : "달러 (USD)"}
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 10 }}>
+                {[["KRW", "🇰🇷 원화 (KRW)"], ["USD", "🇺🇸 달러 (USD)"]].map(([cur, label]) => (
+                  <button
+                    key={cur}
+                    onClick={() => setCashCurrency(cur)}
+                    style={{
+                      ...S.btn, flex: 1, padding: "12px 10px", fontSize: 13,
+                      color: cashCurrency === cur ? S.accent : S.textMuted,
+                      fontWeight: cashCurrency === cur ? 700 : 400,
+                      border: cashCurrency === cur ? `1px solid ${S.accent}` : "1px solid transparent",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* 금액 입력 */}
             <div>
               <label style={{ color: S.textMuted, fontSize: 11, marginBottom: 6, display: "block" }}>
-                보유 금액 ({cashCurrency === "KRW" ? "원" : "USD"})
+                보유 금액 ({cashCurrency === "KRW" ? "원" : cashCurrency})
               </label>
               <div style={{ ...S.inset, padding: "12px 16px" }}>
                 <input
@@ -727,14 +746,16 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
                 <div style={{ fontSize: 11, color: S.textMuted, marginTop: 4, textAlign: "right" }}>
                   {cashCurrency === "KRW"
                     ? `${Number(cashAmount).toLocaleString()}원`
-                    : `$${Number(cashAmount).toLocaleString()}`}
+                    : `${cashCurrency} ${Number(cashAmount).toLocaleString()}`}
                 </div>
               )}
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-              <button onClick={() => setStep("type")} style={{ ...S.btn, flex: 1, padding: 12, color: S.textSecondary, fontSize: 13 }}>
-                ← 뒤로
-              </button>
+              {!cashFor && (
+                <button onClick={() => setStep("type")} style={{ ...S.btn, flex: 1, padding: 12, color: S.textSecondary, fontSize: 13 }}>
+                  ← 뒤로
+                </button>
+              )}
               <button
                 onClick={handleAddCash}
                 disabled={!cashAmount || parseFloat(cashAmount) <= 0}
@@ -1146,7 +1167,7 @@ export default function GoldenFuture() {
 
   const evalAsset = (a) => {
     if (a.marketType === "cash") {
-      const isUsdCash = a.ticker === "USD"
+      const isUsdCash = a.ticker === "USD" || a.ticker === "USDT"
       const krw = isUsdCash ? a.quantity * exchangeRate : a.quantity
       return {
         ...a,
@@ -1331,11 +1352,15 @@ export default function GoldenFuture() {
   const ownerTotal = (own) => byOwner(own).reduce((s, a) => s + a.krwValue, 0)
   const ownerPnl = (own) => byOwner(own).reduce((s, a) => s + (a.krwValue - a.krwCost), 0)
 
+  // 탭별 현금 (kr→KRW, us→USD, crypto→USDT)
+  const CASH_TICKER: Record<string, string> = { kr: "KRW", us: "USD", crypto: "USDT" }
+  const cashByTab = (mkt: string) => evaluated.filter((a) => a.marketType === "cash" && a.ticker === CASH_TICKER[mkt])
+  const cashTotal = (mkt: string) => cashByTab(mkt).reduce((s, a) => s + a.krwValue, 0)
+
   const allocationData = [
-    { name: "국내주식", value: marketTotal("kr"), color: "#3F72AF" },
-    { name: "해외주식", value: marketTotal("us"), color: "#5a8fc7" },
-    { name: "암호화폐", value: marketTotal("crypto"), color: "#112D4E" },
-    { name: "현금", value: marketTotal("cash"), color: "#22c55e" },
+    { name: "국내주식", value: marketTotal("kr") + cashTotal("kr"), color: "#3F72AF" },
+    { name: "해외주식", value: marketTotal("us") + cashTotal("us"), color: "#5a8fc7" },
+    { name: "암호화폐", value: marketTotal("crypto") + cashTotal("crypto"), color: "#112D4E" },
   ].filter((d) => d.value > 0)
 
   const contribData = selectedUser !== "전체"
@@ -1596,7 +1621,6 @@ export default function GoldenFuture() {
         ["kr", "🇰🇷 국내주식"],
         ["us", "🇺🇸 해외주식"],
         ["crypto", "🪙 암호화폐"],
-        ["cash", "💵 현금"],
         ["insights", "리포트"],
       ]
     : [
@@ -1604,7 +1628,6 @@ export default function GoldenFuture() {
         ["kr", "🇰🇷 국내주식"],
         ["us", "🇺🇸 해외주식"],
         ["crypto", "🪙 암호화폐"],
-        ["cash", "💵 현금"],
         ["insights", "리포트"],
       ];
 
@@ -1846,104 +1869,6 @@ export default function GoldenFuture() {
         </div>
       )}
 
-      {/* ═══════════ CASH TAB ═══════════ */}
-      {tab === "cash" && (
-        <div>
-          <div style={{ ...S.card, padding: 24, marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div>
-                <div style={{ fontSize: 17, fontWeight: 700, color: S.textPrimary }}>💵 현금</div>
-                <div style={{ fontSize: 12, color: S.textMuted }}>
-                  총 {fmt(marketTotal("cash"))}원
-                </div>
-              </div>
-              <button
-                onClick={() => setShowAdd({ owner: selectedUser === "전체" ? null : selectedUser, market: "cash" })}
-                style={{ ...S.btn, padding: "8px 16px", fontSize: 13, color: S.accent, fontWeight: 600 }}
-              >
-                + 현금 추가
-              </button>
-            </div>
-            {/* 현금 요약 */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-              {[
-                ["🇰🇷 원화 (KRW)", byMarket("cash").filter((a) => a.ticker === "KRW").reduce((s, a) => s + a.quantity, 0), "KRW"],
-                ["🇺🇸 달러 (USD)", byMarket("cash").filter((a) => a.ticker === "USD").reduce((s, a) => s + a.quantity, 0), "USD"],
-              ].map(([label, amount, cur]) => (
-                <div key={cur} style={{ ...S.inset, padding: 16, textAlign: "center" }}>
-                  <div style={{ fontSize: 11, color: S.textMuted, marginBottom: 6 }}>{label}</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: S.textPrimary, fontFamily: "'JetBrains Mono',monospace" }}>
-                    {cur === "KRW" ? `${fmt(amount)}원` : `$${amount.toLocaleString()}`}
-                  </div>
-                  {cur === "USD" && amount > 0 && (
-                    <div style={{ fontSize: 11, color: S.textMuted, marginTop: 4 }}>
-                      ≈ {fmt(amount * exchangeRate)}원
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            {/* 현금 목록 테이블 */}
-            {byMarket("cash").length > 0 ? (
-              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 3px" }}>
-                <thead>
-                  <tr style={{ fontSize: 11, color: S.textMuted }}>
-                    <td style={{ padding: "6px 10px" }}>종류</td>
-                    <td style={{ padding: "6px 10px" }}>보유자</td>
-                    <td style={{ padding: "6px 10px", textAlign: "right" }}>보유금액</td>
-                    <td style={{ padding: "6px 10px", textAlign: "right" }}>원화환산</td>
-                    <td style={{ padding: "6px 8px", textAlign: "center", width: 52 }}></td>
-                  </tr>
-                </thead>
-                <tbody>
-                  {byMarket("cash").map((a, i) => (
-                    <tr key={i} style={{ background: "rgba(255,255,255,0.35)", borderRadius: 10 }}>
-                      <td style={{ padding: "10px 10px", borderRadius: "10px 0 0 10px" }}>
-                        <div style={{ fontSize: 13, color: S.textPrimary, fontWeight: 600 }}>{a.name}</div>
-                        <div style={{ fontSize: 11, color: S.textMuted }}>{a.ticker}</div>
-                      </td>
-                      <td style={{ padding: "10px" }}>
-                        <span style={{
-                          fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
-                          background: a.owner === "용" ? "rgba(212,175,55,0.12)" : "rgba(30,136,229,0.12)",
-                          color: a.owner === "용" ? "#d4af37" : "#1e88e5",
-                        }}>
-                          {a.owner}
-                        </span>
-                      </td>
-                      <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 14, fontWeight: 700, color: S.textPrimary }}>
-                        {a.ticker === "KRW" ? `${fmt(a.quantity)}원` : `$${a.quantity.toLocaleString()}`}
-                      </td>
-                      <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: S.textMuted }}>
-                        {fmt(a.krwValue)}원
-                      </td>
-                      <td style={{ padding: "4px 8px", textAlign: "center" }}>
-                        <button
-                          onClick={() => setSellTarget(a)}
-                          style={{
-                            ...S.btn, padding: "4px 10px", fontSize: 11, fontWeight: 700,
-                            color: "#c0392b", border: "1px solid rgba(192,57,43,0.2)",
-                            boxShadow: "2px 2px 6px rgba(192,57,43,0.1), -1px -1px 4px rgba(255,255,255,0.7)",
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, #c0392b, #e74c3c)"; e.currentTarget.style.color = "#fff" }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = S.btn.background; e.currentTarget.style.color = "#c0392b" }}
-                        >
-                          삭제
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div style={{ textAlign: "center", color: S.textMuted, fontSize: 13, padding: "24px 0" }}>
-                보유 현금이 없습니다
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ═══════════ MARKET CATEGORY TABS ═══════════ */}
       {["kr", "us", "crypto"].includes(tab) && (
         <div>
@@ -1957,12 +1882,20 @@ export default function GoldenFuture() {
                   {byMarket(tab).length}개 종목 · 총 {fmt(marketTotal(tab))}원
                 </div>
               </div>
-              <button
-                onClick={() => setShowAdd({ owner: selectedUser === "전체" ? null : selectedUser, market: tab })}
-                style={{ ...S.btn, padding: "8px 16px", fontSize: 13, color: S.accent, fontWeight: 600 }}
-              >
-                + 매수
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => setShowAdd({ owner: selectedUser === "전체" ? null : selectedUser, cashFor: tab })}
+                  style={{ ...S.btn, padding: "8px 14px", fontSize: 13, color: "#22c55e", fontWeight: 600, border: "1px solid rgba(34,197,94,0.3)" }}
+                >
+                  + 현금
+                </button>
+                <button
+                  onClick={() => setShowAdd({ owner: selectedUser === "전체" ? null : selectedUser, market: tab })}
+                  style={{ ...S.btn, padding: "8px 16px", fontSize: 13, color: S.accent, fontWeight: 600 }}
+                >
+                  + 매수
+                </button>
+              </div>
             </div>
 
             {/* Market summary */}
@@ -1986,6 +1919,55 @@ export default function GoldenFuture() {
 
             {/* Asset table with scrollable wrapper */}
             <div style={{ overflowX: "auto" }}>{renderAssetTable(byMarket(tab))}</div>
+
+            {/* 현금 섹션 */}
+            {cashByTab(tab).length > 0 && (
+              <div style={{ marginTop: 16, borderTop: "1px solid rgba(226,232,240,0.6)", paddingTop: 14 }}>
+                <div style={{ fontSize: 12, color: "#22c55e", fontWeight: 600, marginBottom: 8 }}>💵 현금</div>
+                <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 3px" }}>
+                  <tbody>
+                    {cashByTab(tab).map((a, i) => {
+                      const isUsdCash = a.ticker !== "KRW"
+                      return (
+                        <tr key={i} style={{ background: "rgba(34,197,94,0.05)", borderRadius: 10 }}>
+                          <td style={{ padding: "8px 10px", borderRadius: "10px 0 0 10px", fontSize: 13, color: S.textPrimary, fontWeight: 600 }}>
+                            {a.name}
+                          </td>
+                          <td style={{ padding: "8px 10px" }}>
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
+                              background: a.owner === "용" ? "rgba(212,175,55,0.12)" : "rgba(30,136,229,0.12)",
+                              color: a.owner === "용" ? "#d4af37" : "#1e88e5",
+                            }}>
+                              {a.owner}
+                            </span>
+                          </td>
+                          <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 700, color: S.textPrimary }}>
+                            {isUsdCash ? `${a.ticker} ${a.quantity.toLocaleString()}` : `${fmt(a.quantity)}원`}
+                          </td>
+                          <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: S.textMuted }}>
+                            {isUsdCash ? `≈ ${fmt(a.krwValue)}원` : ""}
+                          </td>
+                          <td style={{ padding: "4px 8px", textAlign: "center", borderRadius: "0 10px 10px 0" }}>
+                            <button
+                              onClick={() => setSellTarget(a)}
+                              style={{
+                                ...S.btn, padding: "4px 10px", fontSize: 11, fontWeight: 700,
+                                color: "#c0392b", border: "1px solid rgba(192,57,43,0.2)",
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, #c0392b, #e74c3c)"; e.currentTarget.style.color = "#fff" }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = S.btn.background; e.currentTarget.style.color = "#c0392b" }}
+                            >
+                              삭제
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Bitget 잔고 카드 - 암호화폐 탭에서만 표시 */}
@@ -2190,7 +2172,8 @@ export default function GoldenFuture() {
       {showAdd && (
         <AddAssetModal
           owner={showAdd.owner}
-          defaultMarket={showAdd.market || null}
+          defaultMarket={showAdd.cashFor ? "cash" : showAdd.market || null}
+          cashFor={showAdd.cashFor || null}
           onAdd={handleAddAsset}
           onClose={() => setShowAdd(null)}
         />
