@@ -598,7 +598,7 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
                       ...S.btn, flex: 1, padding: "10px",
                       color: selectedOwner === o ? S.accent : S.textMuted,
                       fontWeight: selectedOwner === o ? 700 : 400,
-                      borderColor: selectedOwner === o ? S.accent : "transparent",
+                      border: selectedOwner === o ? `1px solid ${S.accent}` : "1px solid transparent",
                     }}
                   >
                     {o === "용" ? "🐉" : "🐲"} {o}
@@ -895,26 +895,7 @@ export default function GoldenFuture() {
   const [selectedUser, setSelectedUser] = useState<"전체" | "용" | "령">("전체")
   const [showAdd, setShowAdd] = useState(null)
   const [sellTarget, setSellTarget] = useState(null) // asset being sold
-  const [assets, setAssets] = useState([
-    // 용's portfolio
-    { owner: "용", ticker: "005930", name: "삼성전자", marketType: "kr", quantity: 50, avgPrice: 68000, currentPrice: 72500 },
-    { owner: "용", ticker: "000660", name: "SK하이닉스", marketType: "kr", quantity: 20, avgPrice: 155000, currentPrice: 178000 },
-    { owner: "용", ticker: "035420", name: "NAVER", marketType: "kr", quantity: 15, avgPrice: 195000, currentPrice: 215000 },
-    { owner: "용", ticker: "NVDA", name: "NVIDIA", marketType: "us", quantity: 10, avgPrice: 720, currentPrice: 880.5 },
-    { owner: "용", ticker: "VOO", name: "Vanguard S&P 500", marketType: "us", quantity: 15, avgPrice: 440, currentPrice: 495.3 },
-    { owner: "용", ticker: "AAPL", name: "Apple", marketType: "us", quantity: 20, avgPrice: 165, currentPrice: 195.2 },
-    { owner: "용", ticker: "BTC", name: "Bitcoin", marketType: "crypto", quantity: 0.15, avgPrice: 85000000, currentPrice: 97250000 },
-    { owner: "용", ticker: "SOL", name: "Solana", marketType: "crypto", quantity: 50, avgPrice: 180000, currentPrice: 285000 },
-    // 령's portfolio
-    { owner: "령", ticker: "005380", name: "현대차", marketType: "kr", quantity: 25, avgPrice: 210000, currentPrice: 245000 },
-    { owner: "령", ticker: "042700", name: "한미반도체", marketType: "kr", quantity: 40, avgPrice: 98000, currentPrice: 125000 },
-    { owner: "령", ticker: "MSFT", name: "Microsoft", marketType: "us", quantity: 8, avgPrice: 350, currentPrice: 420.5 },
-    { owner: "령", ticker: "SCHD", name: "Schwab Dividend ETF", marketType: "us", quantity: 40, avgPrice: 72, currentPrice: 78.5 },
-    { owner: "령", ticker: "TSLA", name: "Tesla", marketType: "us", quantity: 12, avgPrice: 210, currentPrice: 245.6 },
-    { owner: "령", ticker: "KO", name: "Coca-Cola", marketType: "us", quantity: 30, avgPrice: 55, currentPrice: 62.5 },
-    { owner: "령", ticker: "ETH", name: "Ethereum", marketType: "crypto", quantity: 2, avgPrice: 3800000, currentPrice: 4850000 },
-    { owner: "령", ticker: "DOGE", name: "Dogecoin", marketType: "crypto", quantity: 10000, avgPrice: 350, currentPrice: 580 },
-  ])
+  const [assets, setAssets] = useState([])
 
   // Sold assets history
   const [soldHistory, setSoldHistory] = useState([])
@@ -1131,11 +1112,13 @@ export default function GoldenFuture() {
       const holdingsData = await holdingsRes.json()
       if (!holdingsRes.ok) throw new Error(holdingsData.error || "잔고 조회 실패")
 
-      const enriched = (holdingsData.holdings || []).map((h: any) => ({
-        ...h,
-        usdtPrice: pricesData.prices[h.ticker] || 0,
-        krwValue: Math.round((pricesData.prices[h.ticker] || 0) * h.total * exchangeRate),
-      }))
+      const enriched = (holdingsData.holdings || [])
+        .map((h: any) => ({
+          ...h,
+          usdtPrice: pricesData.prices[h.ticker] || 0,
+          krwValue: Math.round((pricesData.prices[h.ticker] || 0) * h.total * exchangeRate),
+        }))
+        .filter((h: any) => h.krwValue >= 1000) // 1,000원 미만 dust 제거
       setBitgetHoldings(enriched)
       setBitgetUsdtBalance(holdingsData.usdtBalance || 0)
 
@@ -1355,7 +1338,7 @@ export default function GoldenFuture() {
             onClick={() => setTab(key)}
             style={{
               ...(tab === key
-                ? { ...S.btn, ...S.btnPress, color: S.accent, borderColor: `rgba(63,114,175,0.25)` }
+                ? { ...S.btn, ...S.btnPress, color: S.accent, border: `1px solid rgba(63,114,175,0.25)` }
                 : { ...S.btn, color: S.textSecondary }),
               padding: "9px 18px", fontSize: 12, fontWeight: 600,
             }}
