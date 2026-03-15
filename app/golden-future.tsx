@@ -1893,7 +1893,7 @@ export default function GoldenFuture() {
                   {tab === "kr" ? "🇰🇷 국내주식" : tab === "us" ? "🇺🇸 해외주식" : "🪙 암호화폐"}
                 </div>
                 <div style={{ fontSize: 12, color: S.textMuted }}>
-                  {byMarket(tab).length}개 종목 · 총 {fmt(marketTotal(tab))}원
+                  {byMarket(tab).length}개 종목 · 총 {fmt(marketTotal(tab) + cashTotal(tab))}원
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -1916,12 +1916,21 @@ export default function GoldenFuture() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
               {(() => {
                 const items = byMarket(tab)
-                const mktPnl = items.reduce((s, a) => s + (a.krwValue - a.krwCost), 0)
+                // 평가손익: crypto는 pnl(USD) * 환율, 나머지는 krwValue - krwCost
+                const mktPnl = items.reduce((s, a) => {
+                  const pnlKrw = a.marketType === "crypto"
+                    ? a.pnl * exchangeRate
+                    : (a.marketType === "us" ? a.pnl * exchangeRate : a.pnl)
+                  return s + pnlKrw
+                }, 0)
                 const mktCost = items.reduce((s, a) => s + a.krwCost, 0)
+                // 평가금액 = 종목 합계 + 현금 합계
+                const totalWithCash = marketTotal(tab) + cashTotal(tab)
+                const pct = mktCost > 0 ? (mktPnl / mktCost) * 100 : 0
                 return [
-                  ["평가금액", fmt(marketTotal(tab)) + "원", S.textPrimary],
+                  ["평가금액", fmt(totalWithCash) + "원", S.textPrimary],
                   ["평가손익", `${mktPnl >= 0 ? "+" : ""}${fmt(mktPnl)}원`, mktPnl >= 0 ? S.profit : S.loss],
-                  ["수익률", `${mktCost ? ((marketTotal(tab) / mktCost - 1) * 100).toFixed(1) : 0}%`, mktPnl >= 0 ? S.profit : S.loss],
+                  ["수익률", `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`, mktPnl >= 0 ? S.profit : S.loss],
                 ].map(([l, v, c], i) => (
                   <div key={i} style={{ ...S.inset, padding: 12, textAlign: "center" }}>
                     <div style={{ fontSize: 10, color: S.textMuted, marginBottom: 3 }}>{l}</div>
