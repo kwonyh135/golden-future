@@ -177,6 +177,7 @@ const toAssetRow = (asset) => ({
   quantity: asset.quantity,
   avg_price: asset.avgPrice,
   current_price: asset.currentPrice,
+  leverage: asset.leverage ?? 1,
 })
 
 const fromAssetRow = (row) => ({
@@ -185,6 +186,7 @@ const fromAssetRow = (row) => ({
   name: row.name,
   marketType: row.market_type,
   quantity: row.quantity,
+  leverage: row.leverage ?? 1,
   avgPrice: row.avg_price,
   currentPrice: row.current_price,
 })
@@ -580,6 +582,7 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
   const [selected, setSelected] = useState(null)
   const [qty, setQty] = useState("")
   const [avg, setAvg] = useState("")
+  const [leverage, setLeverage] = useState(1)
   const [selectedOwner, setSelectedOwner] = useState(owner || "용")
   const [cashCurrency, setCashCurrency] = useState("KRW")
   const [cashAmount, setCashAmount] = useState("")
@@ -592,6 +595,7 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
       owner: selectedOwner, ticker, name: selected.name, marketType,
       quantity: parseFloat(qty), avgPrice: parseFloat(avg),
       currentPrice: getSimPrice(ticker),
+      leverage: marketType === "crypto" ? leverage : 1,
     })
     onClose()
   }
@@ -777,6 +781,56 @@ function AddAssetModal({ owner, defaultMarket, onAdd, onClose }) {
                 </div>
               </div>
             </div>
+
+            {/* 레버리지 선택 (코인만) */}
+            {marketType === "crypto" && (
+              <div>
+                <label style={{ color: S.textMuted, fontSize: 11, marginBottom: 6, display: "block" }}>
+                  레버리지 배수
+                  {leverage > 1 && <span style={{ color: "#e63946", fontWeight: 700, marginLeft: 6 }}>{leverage}×</span>}
+                </label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {[1, 2, 3, 5, 10, 15, 20].map((lv) => (
+                    <button
+                      key={lv}
+                      onClick={() => setLeverage(lv)}
+                      style={{
+                        ...S.btn,
+                        padding: "6px 12px",
+                        fontSize: 12,
+                        fontWeight: leverage === lv ? 700 : 400,
+                        color: leverage === lv ? (lv === 1 ? S.accent : "#e63946") : S.textMuted,
+                        border: leverage === lv ? `1px solid ${lv === 1 ? S.accent : "#e63946"}` : "1px solid transparent",
+                        background: leverage === lv && lv > 1 ? "rgba(230,57,70,0.08)" : undefined,
+                      }}
+                    >
+                      {lv}×
+                    </button>
+                  ))}
+                  {/* 직접 입력 */}
+                  <div style={{ ...S.inset, padding: "5px 10px", display: "flex", alignItems: "center", gap: 4 }}>
+                    <input
+                      type="number"
+                      min={1} max={20}
+                      placeholder="직접"
+                      value={[1,2,3,5,10,15,20].includes(leverage) ? "" : leverage}
+                      onChange={(e) => {
+                        const v = Math.min(20, Math.max(1, parseInt(e.target.value) || 1))
+                        setLeverage(v)
+                      }}
+                      style={{ width: 36, background: "transparent", border: "none", outline: "none", color: S.textPrimary, fontSize: 12, fontFamily: "'JetBrains Mono',monospace" }}
+                    />
+                    <span style={{ fontSize: 11, color: S.textMuted }}>×</span>
+                  </div>
+                </div>
+                {leverage > 1 && (
+                  <div style={{ fontSize: 11, color: "#e63946", marginTop: 6 }}>
+                    ⚠ 손익이 {leverage}배로 계산됩니다 (평가금액은 실제 포지션 기준)
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
               <button onClick={() => setStep("type")} style={{ ...S.btn, flex: 1, padding: 12, color: S.textSecondary, fontSize: 13 }}>
                 ← 뒤로
@@ -1054,7 +1108,7 @@ export default function GoldenFuture() {
 
     const loadFromSupabase = async () => {
       try {
-        const assetRows = await supabaseRequest("golden_assets", { query: "select=owner,ticker,name,market_type,quantity,avg_price,current_price&order=created_at.asc" })
+        const assetRows = await supabaseRequest("golden_assets", { query: "select=owner,ticker,name,market_type,quantity,avg_price,current_price,leverage&order=created_at.asc" })
         const soldRows = await supabaseRequest("golden_sold_history", { query: "select=owner,ticker,name,market_type,quantity,avg_price,sell_price,realized_pnl,realized_pnl_pct,sell_date&order=created_at.asc" })
 
         const remoteAssets = Array.isArray(assetRows) ? assetRows.map(fromAssetRow) : []
@@ -1110,14 +1164,17 @@ export default function GoldenFuture() {
     const isUsd = a.marketType === "us" || a.marketType === "crypto"
     const krw = isUsd ? val * exchangeRate : val
     const krwC = isUsd ? cost * exchangeRate : cost
+    // 레버리지 적용 (crypto만, 평가금액은 비레버리지, 손익은 레버리지)
+    const leverage = (a.marketType === "crypto" && a.leverage > 1) ? a.leverage : 1
+    const rawPnl = val - cost
     return {
       ...a,
-      value: val,
+      value: val,           // 평가금액: 레버리지 미적용
       cost,
       krwValue: krw,
       krwCost: krwC,
-      pnl: val - cost,
-      pnlPct: ((val - cost) / cost) * 100,
+      pnl: rawPnl * leverage,                                        // 손익: 레버리지 적용
+      pnlPct: cost > 0 ? (rawPnl / cost) * 100 * leverage : 0,      // 수익률: 레버리지 적용
     }
   }
 
@@ -1461,7 +1518,14 @@ export default function GoldenFuture() {
           return (
             <tr key={i} style={{ background: "rgba(255,255,255,0.35)", borderRadius: 10 }}>
               <td style={{ padding: "10px 10px", borderRadius: "10px 0 0 10px" }}>
-                <div style={{ fontSize: 13, color: S.textPrimary, fontWeight: 600 }}>{a.name}</div>
+                <div style={{ fontSize: 13, color: S.textPrimary, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                  {a.name}
+                  {a.marketType === "crypto" && a.leverage > 1 && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "rgba(230,57,70,0.12)", color: "#e63946", fontFamily: "'JetBrains Mono',monospace" }}>
+                      {a.leverage}×
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: 11, color: S.textMuted, fontFamily: "'JetBrains Mono',monospace" }}>
                   {a.ticker} · {a.quantity}{a.marketType === "crypto" ? "" : "주"}
                 </div>
