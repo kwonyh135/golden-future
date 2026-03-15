@@ -421,6 +421,152 @@ function SellModal({ asset, onConfirm, onClose }) {
 
 
 /* ═══════════════════════════════════════════
+   EditModal — 자산 수정
+   ═══════════════════════════════════════════ */
+function EditModal({ asset, onConfirm, onClose }) {
+  const [qty, setQty] = useState(String(asset.quantity))
+  const [avg, setAvg] = useState(String(asset.avgPrice))
+  const [leverage, setLeverage] = useState(asset.leverage ?? 1)
+  const isCrypto = asset.marketType === "crypto"
+  const isCash = asset.marketType === "cash"
+  const isUsd = asset.marketType === "us" || isCrypto
+
+  const handleConfirm = () => {
+    const newQty = parseFloat(qty)
+    const newAvg = parseFloat(avg)
+    if (!newQty || newQty <= 0 || !newAvg || newAvg <= 0) return
+    onConfirm({ ...asset, quantity: newQty, avgPrice: newAvg, leverage: isCrypto ? leverage : (asset.leverage ?? 1) })
+    onClose()
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "rgba(17,45,78,0.15)", backdropFilter: "blur(12px)",
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          ...S.glass, background: "#F9F7F7", padding: 28,
+          width: "min(400px,90vw)",
+          boxShadow: "8px 8px 20px rgba(17,45,78,0.2), -4px -4px 12px rgba(255,255,255,0.9)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <span style={{ ...goldText, fontSize: 18, fontWeight: 700 }}>수정</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: S.textMuted, fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+
+        {/* 종목 정보 */}
+        <div style={{ ...S.inset, padding: "12px 16px", marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: S.textPrimary }}>{asset.name}</div>
+          <div style={{ fontSize: 11, color: S.textMuted, fontFamily: "'JetBrains Mono',monospace" }}>
+            {asset.ticker} · {asset.marketType.toUpperCase()}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {isCash ? (
+            /* 현금: 금액만 수정 */
+            <div>
+              <label style={{ fontSize: 11, color: S.textMuted, display: "block", marginBottom: 6 }}>
+                보유 금액 ({asset.ticker})
+              </label>
+              <div style={{ ...S.inset, padding: "12px 16px" }}>
+                <input
+                  value={qty} onChange={(e) => setQty(e.target.value)} type="number"
+                  style={{ width: "100%", background: "transparent", border: "none", outline: "none", color: S.textPrimary, fontSize: 16, fontFamily: "'JetBrains Mono',monospace" }}
+                />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: S.textMuted, display: "block", marginBottom: 6 }}>수량</label>
+                  <div style={{ ...S.inset, padding: "10px 14px" }}>
+                    <input
+                      value={qty} onChange={(e) => setQty(e.target.value)} type="number"
+                      style={{ width: "100%", background: "transparent", border: "none", outline: "none", color: S.textPrimary, fontSize: 14, fontFamily: "'JetBrains Mono',monospace" }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: S.textMuted, display: "block", marginBottom: 6 }}>
+                    평단가 ({isUsd ? "USD" : "KRW"})
+                  </label>
+                  <div style={{ ...S.inset, padding: "10px 14px" }}>
+                    <input
+                      value={avg} onChange={(e) => setAvg(e.target.value)} type="number"
+                      style={{ width: "100%", background: "transparent", border: "none", outline: "none", color: S.textPrimary, fontSize: 14, fontFamily: "'JetBrains Mono',monospace" }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 레버리지 (코인만) */}
+              {isCrypto && (
+                <div>
+                  <label style={{ fontSize: 11, color: S.textMuted, display: "block", marginBottom: 6 }}>
+                    레버리지{leverage > 1 && <span style={{ color: "#e63946", fontWeight: 700, marginLeft: 6 }}>{leverage}×</span>}
+                  </label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {[1, 2, 3, 5, 10, 15, 20].map((lv) => (
+                      <button
+                        key={lv}
+                        onClick={() => setLeverage(lv)}
+                        style={{
+                          ...S.btn, padding: "6px 12px", fontSize: 12,
+                          fontWeight: leverage === lv ? 700 : 400,
+                          color: leverage === lv ? (lv === 1 ? S.accent : "#e63946") : S.textMuted,
+                          border: leverage === lv ? `1px solid ${lv === 1 ? S.accent : "#e63946"}` : "1px solid transparent",
+                          background: leverage === lv && lv > 1 ? "rgba(230,57,70,0.08)" : undefined,
+                        }}
+                      >
+                        {lv}×
+                      </button>
+                    ))}
+                    <div style={{ ...S.inset, padding: "5px 10px", display: "flex", alignItems: "center", gap: 4 }}>
+                      <input
+                        type="number" min={1} max={20} placeholder="직접"
+                        value={[1,2,3,5,10,15,20].includes(leverage) ? "" : leverage}
+                        onChange={(e) => setLeverage(Math.min(20, Math.max(1, parseInt(e.target.value) || 1)))}
+                        style={{ width: 36, background: "transparent", border: "none", outline: "none", color: S.textPrimary, fontSize: 12, fontFamily: "'JetBrains Mono',monospace" }}
+                      />
+                      <span style={{ fontSize: 11, color: S.textMuted }}>×</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <button onClick={onClose} style={{ ...S.btn, flex: 1, padding: 12, color: S.textSecondary, fontSize: 13 }}>
+              취소
+            </button>
+            <button
+              onClick={handleConfirm}
+              style={{
+                ...S.btn, flex: 2, padding: 12,
+                background: S.accentGrad, color: "#fff", fontSize: 14, fontWeight: 700,
+                border: "none", boxShadow: "3px 3px 10px rgba(37,99,235,0.3)",
+              }}
+            >
+              수정 확정
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════
    Components
    ═══════════════════════════════════════════ */
 function StockSearch({ marketType, onSelect, onClose }) {
@@ -1089,7 +1235,8 @@ export default function GoldenFuture() {
   const [tab, setTab] = useState("dashboard")
   const [selectedUser, setSelectedUser] = useState<"전체" | "용" | "령">("전체")
   const [showAdd, setShowAdd] = useState(null)
-  const [sellTarget, setSellTarget] = useState(null) // asset being sold
+  const [sellTarget, setSellTarget] = useState(null)
+  const [editTarget, setEditTarget] = useState(null)
   const [assets, setAssets] = useState([])
 
   // Sold assets history
@@ -1483,6 +1630,24 @@ export default function GoldenFuture() {
     }
   }
 
+  const handleEditAsset = async (updated) => {
+    setAssets((prev) => prev.map((a) =>
+      a.owner === updated.owner && a.ticker === updated.ticker ? updated : a
+    ))
+    if (!hasSupabaseConfig) return
+    try {
+      await supabaseRequest("golden_assets", {
+        method: "PATCH",
+        query: `owner=eq.${encodeURIComponent(updated.owner)}&ticker=eq.${encodeURIComponent(updated.ticker)}`,
+        body: { quantity: updated.quantity, avg_price: updated.avgPrice, leverage: updated.leverage ?? 1 },
+      })
+      setSyncStatus("수정 완료")
+    } catch (error) {
+      console.error(error)
+      setSyncStatus("수정 실패 (재시도 필요)")
+    }
+  }
+
   const handleBitgetSync = async () => {
     setIsBitgetSyncing(true)
     setBitgetStatus("동기화 중...")
@@ -1598,30 +1763,34 @@ export default function GoldenFuture() {
               <td style={{ padding: "10px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 600, color: pnlKrw >= 0 ? S.profit : S.loss, borderRadius: "0 10px 10px 0" }}>
                 {pnlKrw >= 0 ? "+" : ""}{fmt(pnlKrw)}원
               </td>
-              {/* 매도 버튼 */}
+              {/* 수정/매도 버튼 */}
               <td style={{ padding: "4px 8px", textAlign: "center" }}>
-                <button
-                  onClick={() => setSellTarget(a)}
-                  style={{
-                    ...S.btn,
-                    padding: "4px 10px",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "#c0392b",
-                    border: "1px solid rgba(192,57,43,0.2)",
-                    boxShadow: "2px 2px 6px rgba(192,57,43,0.1), -1px -1px 4px rgba(255,255,255,0.7)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "linear-gradient(135deg, #c0392b, #e74c3c)"
-                    e.currentTarget.style.color = "#fff"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = S.btn.background
-                    e.currentTarget.style.color = "#c0392b"
-                  }}
-                >
-                  매도
-                </button>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button
+                    onClick={() => setEditTarget(a)}
+                    style={{
+                      ...S.btn, padding: "4px 8px", fontSize: 11, fontWeight: 700,
+                      color: S.accent, border: "1px solid rgba(37,99,235,0.2)",
+                      boxShadow: "2px 2px 6px rgba(37,99,235,0.08), -1px -1px 4px rgba(255,255,255,0.7)",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = S.accentGrad; e.currentTarget.style.color = "#fff" }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = S.btn.background; e.currentTarget.style.color = S.accent }}
+                  >
+                    수정
+                  </button>
+                  <button
+                    onClick={() => setSellTarget(a)}
+                    style={{
+                      ...S.btn, padding: "4px 8px", fontSize: 11, fontWeight: 700,
+                      color: "#c0392b", border: "1px solid rgba(192,57,43,0.2)",
+                      boxShadow: "2px 2px 6px rgba(192,57,43,0.1), -1px -1px 4px rgba(255,255,255,0.7)",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, #c0392b, #e74c3c)"; e.currentTarget.style.color = "#fff" }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = S.btn.background; e.currentTarget.style.color = "#c0392b" }}
+                  >
+                    매도
+                  </button>
+                </div>
               </td>
             </tr>
           )
@@ -1972,17 +2141,30 @@ export default function GoldenFuture() {
                             {isUsdCash ? `≈ ${fmt(a.krwValue)}원` : ""}
                           </td>
                           <td style={{ padding: "4px 8px", textAlign: "center", borderRadius: "0 10px 10px 0" }}>
-                            <button
-                              onClick={() => setSellTarget(a)}
-                              style={{
-                                ...S.btn, padding: "4px 10px", fontSize: 11, fontWeight: 700,
-                                color: "#c0392b", border: "1px solid rgba(192,57,43,0.2)",
-                              }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, #c0392b, #e74c3c)"; e.currentTarget.style.color = "#fff" }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = S.btn.background; e.currentTarget.style.color = "#c0392b" }}
-                            >
-                              삭제
-                            </button>
+                            <div style={{ display: "flex", gap: 4 }}>
+                              <button
+                                onClick={() => setEditTarget(a)}
+                                style={{
+                                  ...S.btn, padding: "4px 8px", fontSize: 11, fontWeight: 700,
+                                  color: S.accent, border: "1px solid rgba(37,99,235,0.2)",
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = S.accentGrad; e.currentTarget.style.color = "#fff" }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = S.btn.background; e.currentTarget.style.color = S.accent }}
+                              >
+                                수정
+                              </button>
+                              <button
+                                onClick={() => setSellTarget(a)}
+                                style={{
+                                  ...S.btn, padding: "4px 8px", fontSize: 11, fontWeight: 700,
+                                  color: "#c0392b", border: "1px solid rgba(192,57,43,0.2)",
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, #c0392b, #e74c3c)"; e.currentTarget.style.color = "#fff" }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = S.btn.background; e.currentTarget.style.color = "#c0392b" }}
+                              >
+                                삭제
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )
@@ -2208,6 +2390,15 @@ export default function GoldenFuture() {
           asset={sellTarget}
           onConfirm={handleSell}
           onClose={() => setSellTarget(null)}
+        />
+      )}
+
+      {/* ═══ 수정 MODAL ═══ */}
+      {editTarget && (
+        <EditModal
+          asset={editTarget}
+          onConfirm={handleEditAsset}
+          onClose={() => setEditTarget(null)}
         />
       )}
 
