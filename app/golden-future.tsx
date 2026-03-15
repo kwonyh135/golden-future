@@ -1187,6 +1187,7 @@ export default function GoldenFuture() {
 
     await handleImportBitgetHoldings({ skipPriceRefresh: true })
     await refreshMarketPrices("통합")
+    await handleSaveToSupabase()
   }
 
   const grandTotal = evaluated.reduce((s, a) => s + a.krwValue, 0)
@@ -1361,16 +1362,6 @@ export default function GoldenFuture() {
     }
   }
 
-  const handleSyncAll = async () => {
-    await handleBitgetSync()
-    await handleSaveToSupabase()
-  }
-
-  // 페이지 로드 시 자동 동기화
-  useEffect(() => {
-    handleSyncAll()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // Asset table with avgPrice column + monetary PnL + 매도 button
   const renderAssetTable = (items) => (
@@ -1512,19 +1503,6 @@ export default function GoldenFuture() {
 
       {/* User Selection Buttons */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 20 }}>
-        <button
-          onClick={handleSyncAll}
-          disabled={isBitgetSyncing || isSaving}
-          style={{
-            ...((isBitgetSyncing || isSaving) ? { ...S.btn, ...S.btnPress, color: S.textMuted } : { ...S.btn, color: S.accent }),
-            padding: "8px 16px",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: (isBitgetSyncing || isSaving) ? "wait" : "pointer",
-          }}
-        >
-          {(isBitgetSyncing || isSaving) ? "동기화 중..." : "🔄 동기화"}
-        </button>
         <button
           onClick={handleSyncAll}
           disabled={isRefreshingPrices || isImportingBitget}
