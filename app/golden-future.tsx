@@ -1082,12 +1082,6 @@ export default function GoldenFuture() {
   useEffect(() => {
     if (assetsRef.current.length === 0) return
     refreshMarketPrices("초기")
-
-    const timer = setInterval(() => {
-      refreshMarketPrices("주기")
-    }, 60_000)
-
-    return () => clearInterval(timer)
   }, [assets.length])
 
   const handleImportBitgetHoldings = async ({ skipPriceRefresh = false } = {}) => {
