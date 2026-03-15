@@ -134,7 +134,7 @@ const getSimPrice = (t) => {
   return p[t] || (t.length <= 5 ? Math.random() * 500 + 50 : Math.random() * 300000 + 10000)
 }
 
-const EXCHANGE_RATE = 1380
+const EXCHANGE_RATE = 1450
 const fmt = (v) =>
   v >= 100000000
     ? `${(v / 100000000).toFixed(2)}억`
@@ -246,26 +246,7 @@ const normalizeSoldForCompare = (list = []) =>
 
 const isSameData = (left, right) => JSON.stringify(left) === JSON.stringify(right)
 
-const INITIAL_ASSETS = [
-  // 용's portfolio
-  { owner: "용", ticker: "005930", name: "삼성전자", marketType: "kr", quantity: 50, avgPrice: 68000, currentPrice: 72500 },
-  { owner: "용", ticker: "000660", name: "SK하이닉스", marketType: "kr", quantity: 20, avgPrice: 155000, currentPrice: 178000 },
-  { owner: "용", ticker: "035420", name: "NAVER", marketType: "kr", quantity: 15, avgPrice: 195000, currentPrice: 215000 },
-  { owner: "용", ticker: "NVDA", name: "NVIDIA", marketType: "us", quantity: 10, avgPrice: 720, currentPrice: 880.5 },
-  { owner: "용", ticker: "VOO", name: "Vanguard S&P 500", marketType: "us", quantity: 15, avgPrice: 440, currentPrice: 495.3 },
-  { owner: "용", ticker: "AAPL", name: "Apple", marketType: "us", quantity: 20, avgPrice: 165, currentPrice: 195.2 },
-  { owner: "용", ticker: "BTC", name: "Bitcoin", marketType: "crypto", quantity: 0.15, avgPrice: 85000000, currentPrice: 97250000 },
-  { owner: "용", ticker: "SOL", name: "Solana", marketType: "crypto", quantity: 50, avgPrice: 180000, currentPrice: 285000 },
-  // 령's portfolio
-  { owner: "령", ticker: "005380", name: "현대차", marketType: "kr", quantity: 25, avgPrice: 210000, currentPrice: 245000 },
-  { owner: "령", ticker: "042700", name: "한미반도체", marketType: "kr", quantity: 40, avgPrice: 98000, currentPrice: 125000 },
-  { owner: "령", ticker: "MSFT", name: "Microsoft", marketType: "us", quantity: 8, avgPrice: 350, currentPrice: 420.5 },
-  { owner: "령", ticker: "SCHD", name: "Schwab Dividend ETF", marketType: "us", quantity: 40, avgPrice: 72, currentPrice: 78.5 },
-  { owner: "령", ticker: "TSLA", name: "Tesla", marketType: "us", quantity: 12, avgPrice: 210, currentPrice: 245.6 },
-  { owner: "령", ticker: "KO", name: "Coca-Cola", marketType: "us", quantity: 30, avgPrice: 55, currentPrice: 62.5 },
-  { owner: "령", ticker: "ETH", name: "Ethereum", marketType: "crypto", quantity: 2, avgPrice: 3800000, currentPrice: 4850000 },
-  { owner: "령", ticker: "DOGE", name: "Dogecoin", marketType: "crypto", quantity: 10000, avgPrice: 350, currentPrice: 580 },
-]
+const INITIAL_ASSETS = []
 
 const INITIAL_SOLD_HISTORY = []
 
