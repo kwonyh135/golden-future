@@ -388,8 +388,37 @@ function SellModal({ asset, onConfirm, onClose }) {
    ═══════════════════════════════════════════ */
 function StockSearch({ marketType, onSelect, onClose }) {
   const [query, setQuery] = useState("")
+  const [apiResults, setApiResults] = useState<any[]>([])
+  const [isSearching, setIsSearching] = useState(false)
   const inputRef = useRef(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100) }, [])
+
+  // API 검색 (debounce 350ms) - kr/us만
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!query.trim() || marketType === "crypto") {
+      setApiResults([])
+      return
+    }
+    debounceRef.current = setTimeout(async () => {
+      setIsSearching(true)
+      try {
+        const endpoint = marketType === "kr"
+          ? `/api/stock/search/kr?q=${encodeURIComponent(query)}`
+          : `/api/stock/search/us?q=${encodeURIComponent(query)}`
+        const res = await fetch(endpoint)
+        const data = await res.json()
+        setApiResults(data.items || [])
+      } catch {
+        setApiResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 350)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [query, marketType])
 
   const results = useMemo(() => {
     if (!query.trim()) {
@@ -398,14 +427,17 @@ function StockSearch({ marketType, onSelect, onClose }) {
       return CRYPTO_LIST.slice(0, 12)
     }
     const q = query.toLowerCase().trim()
+    // 암호화폐는 정적 리스트
+    if (marketType === "crypto")
+      return CRYPTO_LIST.filter((s) => s.ticker.toLowerCase().startsWith(q) || s.name.toLowerCase().includes(q)).slice(0, 12)
+    // kr/us: API 결과 우선, 없으면 정적 fallback
+    if (apiResults.length > 0) return apiResults
     if (marketType === "kr")
       return KR_STOCKS.filter(
         (s) => s.code.startsWith(q) || s.name.toLowerCase().includes(q) || s.eng.toLowerCase().includes(q),
       ).slice(0, 12)
-    if (marketType === "us")
-      return US_STOCKS.filter((s) => s.ticker.toLowerCase().startsWith(q) || s.name.toLowerCase().includes(q)).slice(0, 12)
-    return CRYPTO_LIST.filter((s) => s.ticker.toLowerCase().startsWith(q) || s.name.toLowerCase().includes(q)).slice(0, 12)
-  }, [query, marketType])
+    return US_STOCKS.filter((s) => s.ticker.toLowerCase().startsWith(q) || s.name.toLowerCase().includes(q)).slice(0, 12)
+  }, [query, marketType, apiResults])
 
   const titles = { kr: "🇰🇷 국내 주식 검색", us: "🇺🇸 해외 주식 검색", crypto: "🪙 암호화폐 검색" }
   const placeholders = {
@@ -463,7 +495,10 @@ function StockSearch({ marketType, onSelect, onClose }) {
           {!query.trim() && (
             <div style={{ fontSize: 11, color: S.textMuted, padding: "8px 8px 4px", fontWeight: 600 }}>인기 종목</div>
           )}
-          {results.map((item, i) => (
+          {isSearching && (
+            <div style={{ textAlign: "center", color: S.textMuted, padding: "16px 0", fontSize: 12 }}>검색 중...</div>
+          )}
+          {!isSearching && results.map((item, i) => (
             <div
               key={i}
               onClick={() => onSelect(item)}
@@ -490,10 +525,12 @@ function StockSearch({ marketType, onSelect, onClose }) {
                 </span>
                 <span style={{ color: S.textPrimary, fontSize: 13, fontWeight: 500 }}>{item.name}</span>
               </div>
-              <span style={{ color: S.textMuted, fontSize: 11 }}>{marketType === "kr" ? item.eng : ""}</span>
+              <span style={{ color: S.textMuted, fontSize: 11 }}>
+                {marketType === "kr" ? (item.market || item.eng || "") : (item.type || "")}
+              </span>
             </div>
           ))}
-          {query && results.length === 0 && (
+          {query && !isSearching && results.length === 0 && (
             <div style={{ textAlign: "center", color: S.textMuted, padding: 32, fontSize: 13 }}>검색 결과가 없습니다</div>
           )}
         </div>
@@ -1112,6 +1149,12 @@ export default function GoldenFuture() {
       setIsBitgetSyncing(false)
     }
   }
+
+  // 페이지 로드 시 Bitget 자동 동기화
+  useEffect(() => {
+    handleBitgetSync()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Asset table with avgPrice column + monetary PnL + 매도 button
   const renderAssetTable = (items) => (
