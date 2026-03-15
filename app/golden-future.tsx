@@ -1179,23 +1179,37 @@ export default function GoldenFuture() {
         pnlPct: 0,
       }
     }
+    if (a.marketType === "crypto") {
+      const lev = (a.leverage > 1) ? a.leverage : 1
+      // 평가금액 = 평단가 * 수량 / 레버리지 (USD, 실제 투입 증거금)
+      const val = (a.avgPrice * a.quantity) / lev
+      // 손익금액 = (현재가 - 평단가) * 수량  (USD) → table에서 * exchangeRate → KRW
+      const rawPnl = (a.currentPrice - a.avgPrice) * a.quantity
+      // 수익률 = rawPnl / val * 100  (레버리지 반영됨)
+      return {
+        ...a,
+        value: val,                   // 평가금액 (USD)
+        cost: val,
+        krwValue: val * exchangeRate, // 총자산 계산용
+        krwCost: val * exchangeRate,
+        pnl: rawPnl,                  // USD P&L → table에서 * exchangeRate = KRW 손익
+        pnlPct: val > 0 ? (rawPnl / val) * 100 : 0,
+      }
+    }
     const val = a.quantity * a.currentPrice
     const cost = a.quantity * a.avgPrice
-    // us, crypto는 USD 기준 → KRW 환산
-    const isUsd = a.marketType === "us" || a.marketType === "crypto"
+    // us는 USD 기준 → KRW 환산
+    const isUsd = a.marketType === "us"
     const krw = isUsd ? val * exchangeRate : val
     const krwC = isUsd ? cost * exchangeRate : cost
-    // 레버리지 적용 (crypto만, 평가금액은 비레버리지, 손익은 레버리지)
-    const leverage = (a.marketType === "crypto" && a.leverage > 1) ? a.leverage : 1
-    const rawPnl = val - cost
     return {
       ...a,
-      value: val,           // 평가금액: 레버리지 미적용
+      value: val,
       cost,
       krwValue: krw,
       krwCost: krwC,
-      pnl: rawPnl * leverage,                                        // 손익: 레버리지 적용
-      pnlPct: cost > 0 ? (rawPnl / cost) * 100 * leverage : 0,      // 수익률: 레버리지 적용
+      pnl: val - cost,
+      pnlPct: cost > 0 ? ((val - cost) / cost) * 100 : 0,
     }
   }
 
