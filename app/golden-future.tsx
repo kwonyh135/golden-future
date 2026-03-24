@@ -1025,7 +1025,8 @@ function DividendCalendar({ assets }) {
   const months = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"]
   const now = new Date().getMonth()
 
-  const dividendSchedule = [
+  // 배당 데이터 (전체 목록) — 실제 보유 종목만 필터링하여 사용
+  const allDividendSchedule = [
     { month: 0, ticker: "AAPL", name: "Apple", amount: 24.0, currency: "USD", payDate: "1/15", type: "분기" },
     { month: 0, ticker: "SCHD", name: "Schwab Div", amount: 42.0, currency: "USD", payDate: "1/20", type: "분기" },
     { month: 1, ticker: "MSFT", name: "Microsoft", amount: 22.4, currency: "USD", payDate: "2/12", type: "분기" },
@@ -1050,6 +1051,9 @@ function DividendCalendar({ assets }) {
     { month: 11, ticker: "KO", name: "Coca-Cola", amount: 18.6, currency: "USD", payDate: "12/15", type: "분기" },
     { month: 11, ticker: "VOO", name: "Vanguard 500", amount: 1.65, currency: "USD", payDate: "12/28", type: "분기" },
   ]
+  // 보유 종목의 ticker 집합 (cash 제외)
+  const heldTickers = new Set(assets.filter((a) => a.marketType !== "cash").map((a) => a.ticker))
+  const dividendSchedule = allDividendSchedule.filter((d) => heldTickers.has(d.ticker))
 
   const monthlyTotals = useMemo(() => {
     return months.map((_, i) => {
@@ -2096,14 +2100,18 @@ export default function GoldenFuture() {
                 // 평가금액 = 종목 합계 + 현금 합계
                 const totalWithCash = marketTotal(tab) + cashTotal(tab)
                 const pct = mktCost > 0 ? (mktPnl / mktCost) * 100 : 0
+                const isUsdTab = tab === "us" || tab === "crypto"
+                const usdTotal = isUsdTab ? (totalWithCash / exchangeRate) : 0
+                const usdPnl = isUsdTab ? (mktPnl / exchangeRate) : 0
                 return [
-                  ["평가금액", fmt(totalWithCash) + "원", S.textPrimary],
-                  ["평가손익", `${mktPnl >= 0 ? "+" : ""}${fmt(mktPnl)}원`, mktPnl >= 0 ? S.profit : S.loss],
-                  ["수익률", `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`, mktPnl >= 0 ? S.profit : S.loss],
-                ].map(([l, v, c], i) => (
+                  ["평가금액", isUsdTab ? fmtU(usdTotal) : fmt(totalWithCash) + "원", S.textPrimary, isUsdTab ? `≈ ${fmt(totalWithCash)}원` : null],
+                  ["평가손익", isUsdTab ? `${usdPnl >= 0 ? "+" : "-"}${fmtU(Math.abs(usdPnl))}` : `${mktPnl >= 0 ? "+" : ""}${fmt(mktPnl)}원`, mktPnl >= 0 ? S.profit : S.loss, isUsdTab ? `≈ ${mktPnl >= 0 ? "+" : ""}${fmt(mktPnl)}원` : null],
+                  ["수익률", `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`, mktPnl >= 0 ? S.profit : S.loss, null],
+                ].map(([l, v, c, sub], i) => (
                   <div key={i} style={{ ...S.inset, padding: 12, textAlign: "center" }}>
                     <div style={{ fontSize: 10, color: S.textMuted, marginBottom: 3 }}>{l}</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: c, fontFamily: "'JetBrains Mono',monospace" }}>{v}</div>
+                    {sub && <div style={{ fontSize: 11, color: S.textMuted, marginTop: 2, fontFamily: "'JetBrains Mono',monospace" }}>{sub}</div>}
                   </div>
                 ))
               })()}
