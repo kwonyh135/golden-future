@@ -1623,10 +1623,31 @@ export default function GoldenFuture() {
   }
 
   const handleAddAsset = async (asset) => {
-    setAssets((prev) => [...prev, asset])
+    let isExisting = false
+    let mergedAsset = asset
+    setAssets((prev) => {
+      const idx = prev.findIndex((a) => a.owner === asset.owner && a.ticker === asset.ticker)
+      if (idx === -1) return [...prev, asset]
+      isExisting = true
+      const existing = prev[idx]
+      const totalQty = existing.quantity + asset.quantity
+      const newAvg = (existing.quantity * existing.avgPrice + asset.quantity * asset.avgPrice) / totalQty
+      mergedAsset = { ...existing, quantity: totalQty, avgPrice: newAvg }
+      const next = [...prev]
+      next[idx] = mergedAsset
+      return next
+    })
     if (!hasSupabaseConfig) return
     try {
-      await supabaseRequest("golden_assets", { method: "POST", body: toAssetRow(asset) })
+      if (isExisting) {
+        await supabaseRequest("golden_assets", {
+          method: "PATCH",
+          query: `owner=eq.${encodeURIComponent(mergedAsset.owner)}&ticker=eq.${encodeURIComponent(mergedAsset.ticker)}`,
+          body: { quantity: mergedAsset.quantity, avg_price: mergedAsset.avgPrice },
+        })
+      } else {
+        await supabaseRequest("golden_assets", { method: "POST", body: toAssetRow(asset) })
+      }
       setSyncStatus("Supabase 동기화 완료")
     } catch (error) {
       console.error(error)
