@@ -725,7 +725,7 @@ function StockSearch({ marketType, onSelect, onClose }) {
 function AddAssetModal({ owner, defaultMarket, cashFor, onAdd, onClose }) {
   // cashFor: "kr" | "us" | "crypto" — 어느 계좌의 현금인지
   const CASH_TICKER_MAP = { kr: "KRW", us: "USD", crypto: "USDT" }
-  const CASH_NAME_MAP = { kr: "원화 현금", us: "달러 현금", crypto: "USDT 현금" }
+  const CASH_NAME_MAP = { kr: "원화 현금", us: "���러 현금", crypto: "USDT 현금" }
   const fixedCashCurrency = cashFor ? CASH_TICKER_MAP[cashFor] : null
 
   const [step, setStep] = useState(cashFor ? "cash" : defaultMarket === "cash" ? "cash" : defaultMarket ? "search" : "type")
@@ -1572,8 +1572,17 @@ export default function GoldenFuture() {
             query: "select=snapshot_date,market_type,total_value,total_cost,total_pnl,pnl_pct&order=snapshot_date.asc" 
           })
           if (Array.isArray(snapshotRows) && snapshotRows.length > 0) {
-            setAssetSnapshots(snapshotRows)
-            pushSaveLog(`자산 스냅샷 ${snapshotRows.length}건 로드 완료`)
+            // Supabase에서 numeric 컬럼이 문자열로 반환되므로 숫자로 변환
+            const parsed = snapshotRows.map(row => ({
+              snapshot_date: row.snapshot_date,
+              market_type: row.market_type,
+              total_value: Number(row.total_value) || 0,
+              total_cost: Number(row.total_cost) || 0,
+              total_pnl: Number(row.total_pnl) || 0,
+              pnl_pct: Number(row.pnl_pct) || 0,
+            }))
+            setAssetSnapshots(parsed)
+            pushSaveLog(`자산 스냅샷 ${parsed.length}건 로드 완료`)
           }
         } catch (snapshotError) {
           console.error("스냅샷 로드 실패:", snapshotError)
