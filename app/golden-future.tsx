@@ -1158,10 +1158,262 @@ function DividendCalendar({ assets }) {
   )
 }
 
-function WeeklyReview({ evaluated, grandTotal }) {
-  const lastWeekTotal = grandTotal * 0.985
+/* ═══════════════════════════════════════════
+   AssetHistoryChart - 투자처별 자산 변화 차트
+   ═══════════════════════════════════════════ */
+function AssetHistoryChart({ 
+  snapshots, 
+  timeRange, 
+  onTimeRangeChange,
+  grandTotal,
+  initialInvestment = 50000000 // 2025년 10월 초기 투자금 5천만원
+}: {
+  snapshots: { snapshot_date: string; market_type: string; total_value: number; total_pnl: number; pnl_pct: number }[];
+  timeRange: "day" | "week" | "month" | "year";
+  onTimeRangeChange: (range: "day" | "week" | "month" | "year") => void;
+  grandTotal: number;
+  initialInvestment?: number;
+}) {
+  const marketColors = {
+    kr: "#3F72AF",
+    us: "#5a8fc7",
+    crypto: "#f59e0b",
+    total: "#2563eb",
+  }
+  
+  const marketLabels = {
+    kr: "한국주식",
+    us: "미국주식", 
+    crypto: "암호화폐",
+    total: "총 자산",
+  }
+
+  // 시간 범위에 따라 데이터 필터링
+  const filteredData = useMemo(() => {
+    if (snapshots.length === 0) return []
+    
+    const now = new Date()
+    let startDate = new Date()
+    
+    switch (timeRange) {
+      case "day":
+        startDate.setDate(now.getDate() - 7) // 최근 7일
+        break
+      case "week":
+        startDate.setDate(now.getDate() - 28) // 최근 4주
+        break
+      case "month":
+        startDate.setMonth(now.getMonth() - 6) // 최근 6개월
+        break
+      case "year":
+        startDate.setFullYear(now.getFullYear() - 1) // 최근 1년
+        break
+    }
+    
+    return snapshots.filter(s => new Date(s.snapshot_date) >= startDate)
+  }, [snapshots, timeRange])
+
+  // 총자산 변화 데이터 (차트용)
+  const totalChartData = useMemo(() => {
+    const totalSnapshots = filteredData.filter(s => s.market_type === "total")
+    return totalSnapshots.map(s => ({
+      date: new Date(s.snapshot_date).toLocaleDateString("ko-KR", { month: "short", day: "numeric" }),
+      fullDate: s.snapshot_date,
+      value: s.total_value,
+      pnl: s.total_pnl,
+      pnlPct: s.pnl_pct,
+    }))
+  }, [filteredData])
+
+  // 투자처별 변화 데이터
+  const marketBreakdown = useMemo(() => {
+    const markets = ["kr", "us", "crypto"]
+    return markets.map(market => {
+      const marketSnapshots = filteredData.filter(s => s.market_type === market)
+      const latest = marketSnapshots[marketSnapshots.length - 1]
+      const earliest = marketSnapshots[0]
+      
+      return {
+        market,
+        label: marketLabels[market],
+        color: marketColors[market],
+        currentValue: latest?.total_value || 0,
+        initialValue: earliest?.total_value || 0,
+        pnl: latest?.total_pnl || 0,
+        pnlPct: latest?.pnl_pct || 0,
+        change: latest && earliest ? latest.total_value - earliest.total_value : 0,
+        changePct: latest && earliest && earliest.total_value > 0 
+          ? ((latest.total_value - earliest.total_value) / earliest.total_value) * 100 
+          : 0,
+      }
+    })
+  }, [filteredData])
+
+  // 스냅샷 데이터가 없을 경우 현재 데이터 기반 목업
+  const hasData = snapshots.length > 0
+
+  // 전체 수익률 계산
+  const totalPnl = grandTotal - initialInvestment
+  const totalPnlPct = initialInvestment > 0 ? (totalPnl / initialInvestment) * 100 : 0
+
+  return (
+    <div style={{ ...S.card, padding: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 11, color: S.textMuted, marginBottom: 2 }}>📈 자산 변화 추이</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: S.textPrimary }}>
+            2025년 10월 ~ 현재
+          </div>
+        </div>
+        
+        {/* 시간 범위 선택 버튼 */}
+        <div style={{ display: "flex", gap: 4 }}>
+          {[
+            { key: "day", label: "일" },
+            { key: "week", label: "주" },
+            { key: "month", label: "월" },
+            { key: "year", label: "연" },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => onTimeRangeChange(key as typeof timeRange)}
+              style={{
+                ...S.btn,
+                padding: "6px 12px",
+                fontSize: 12,
+                fontWeight: timeRange === key ? 700 : 400,
+                color: timeRange === key ? S.accent : S.textMuted,
+                border: timeRange === key ? `1px solid ${S.accent}` : "1px solid transparent",
+                background: timeRange === key ? "rgba(37,99,235,0.08)" : undefined,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 전체 수익률 요약 */}
+      <div style={{ ...S.inset, padding: 16, marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: S.textMuted, marginBottom: 4 }}>초기 투자금</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: S.textPrimary, fontFamily: "'JetBrains Mono',monospace" }}>
+              {fmt(initialInvestment)}원
+            </div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: S.textMuted, marginBottom: 4 }}>현재 총자산</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: S.textPrimary, fontFamily: "'JetBrains Mono',monospace" }}>
+              {fmt(grandTotal)}원
+            </div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: S.textMuted, marginBottom: 4 }}>총 수익</div>
+            <div style={{ 
+              fontSize: 15, fontWeight: 700, 
+              color: totalPnl >= 0 ? S.profit : S.loss, 
+              fontFamily: "'JetBrains Mono',monospace" 
+            }}>
+              {totalPnl >= 0 ? "+" : ""}{fmt(totalPnl)}원 ({totalPnlPct >= 0 ? "+" : ""}{totalPnlPct.toFixed(1)}%)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 총자산 추이 차트 */}
+      {hasData && totalChartData.length > 0 && (
+        <div style={{ ...S.inset, padding: "16px 12px 8px", marginBottom: 20 }}>
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={totalChartData}>
+              <defs>
+                <linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={S.accent} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={S.accent} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="date" tick={{ fill: S.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis hide domain={["dataMin * 0.95", "dataMax * 1.05"]} />
+              <Tooltip 
+                contentStyle={{ ...S.glass, background: "#f5f6fa", fontSize: 12, color: S.textPrimary, border: `1px solid ${S.accentLight}` }} 
+                formatter={(v: number, name: string) => [fmt(v) + "원", name === "value" ? "총자산" : "손익"]}
+                labelFormatter={(label) => label}
+              />
+              <Area type="monotone" dataKey="value" stroke={S.accent} strokeWidth={2.5} fill="url(#totalGrad)" name="총자산" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* 투자처별 자산 변화 */}
+      <div style={{ fontSize: 13, color: S.textMuted, fontWeight: 600, marginBottom: 12 }}>투자처별 자산 변화</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {marketBreakdown.map((m) => (
+          <div key={m.market} style={{ ...S.inset, padding: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: m.color }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: S.textPrimary }}>{m.label}</span>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: S.textPrimary, fontFamily: "'JetBrains Mono',monospace" }}>
+                  {fmt(m.currentValue)}원
+                </div>
+                <div style={{ 
+                  fontSize: 11, 
+                  color: m.pnl >= 0 ? S.profit : S.loss,
+                  fontFamily: "'JetBrains Mono',monospace"
+                }}>
+                  {m.pnl >= 0 ? "+" : ""}{fmt(m.pnl)}원 ({m.pnlPct >= 0 ? "+" : ""}{m.pnlPct.toFixed(1)}%)
+                </div>
+              </div>
+            </div>
+            
+            {/* 진행 바 */}
+            <div style={{ height: 6, background: "rgba(0,0,0,0.05)", borderRadius: 3, overflow: "hidden" }}>
+              <div 
+                style={{ 
+                  height: "100%", 
+                  width: `${Math.min(100, Math.max(0, (m.currentValue / (grandTotal || 1)) * 100))}%`,
+                  background: m.color,
+                  borderRadius: 3,
+                  transition: "width 0.3s ease"
+                }} 
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {!hasData && (
+        <div style={{ textAlign: "center", color: S.textMuted, padding: "20px 0", fontSize: 12 }}>
+          자산 스냅샷 데이터를 불러오는 중...
+        </div>
+      )}
+    </div>
+  )
+}
+
+function WeeklyReview({ evaluated, grandTotal, snapshots = [] }: { evaluated: any[]; grandTotal: number; snapshots?: any[] }) {
+  // 스냅샷 데이터가 있으면 실제 데이터 사용, 없으면 시뮬레이션
+  const hasSnapshots = snapshots.length > 0
+  const totalSnapshots = snapshots.filter(s => s.market_type === "total")
+  
+  // 지난주 데이터 찾기
+  const now = new Date()
+  const oneWeekAgo = new Date(now)
+  oneWeekAgo.setDate(now.getDate() - 7)
+  
+  const lastWeekSnapshot = totalSnapshots.find(s => {
+    const d = new Date(s.snapshot_date)
+    return d <= oneWeekAgo
+  })
+  
+  const lastWeekTotal = hasSnapshots && lastWeekSnapshot 
+    ? lastWeekSnapshot.total_value 
+    : grandTotal * 0.985
   const weekChange = grandTotal - lastWeekTotal
-  const weekPct = (weekChange / lastWeekTotal) * 100
+  const weekPct = lastWeekTotal > 0 ? (weekChange / lastWeekTotal) * 100 : 0
   const topGainer = [...evaluated].sort((a, b) => b.pnlPct - a.pnlPct)[0]
   const topLoser = [...evaluated].sort((a, b) => a.pnlPct - b.pnlPct)[0]
 
@@ -1261,6 +1513,17 @@ export default function GoldenFuture() {
     ticker: string; available: number; total: number; usdtPrice?: number; krwValue?: number
   }[]>([])
   const [bitgetUsdtBalance, setBitgetUsdtBalance] = useState(0)
+  
+  // 자산 스냅샷 히스토리
+  const [assetSnapshots, setAssetSnapshots] = useState<{
+    snapshot_date: string;
+    market_type: string;
+    total_value: number;
+    total_cost: number;
+    total_pnl: number;
+    pnl_pct: number;
+  }[]>([])
+  const [historyTimeRange, setHistoryTimeRange] = useState<"day" | "week" | "month" | "year">("month")
 
   const pushSaveLog = (msg) => {
     const t = new Date().toLocaleTimeString("ko-KR", { hour12: false })
@@ -1302,6 +1565,19 @@ export default function GoldenFuture() {
 
         setAssets(remoteAssets)
         setSoldHistory(remoteSoldHistory)
+        
+        // 자산 스냅샷 히스토리 로드
+        try {
+          const snapshotRows = await supabaseRequest("golden_asset_snapshots", { 
+            query: "select=snapshot_date,market_type,total_value,total_cost,total_pnl,pnl_pct&order=snapshot_date.asc" 
+          })
+          if (Array.isArray(snapshotRows) && snapshotRows.length > 0) {
+            setAssetSnapshots(snapshotRows)
+            pushSaveLog(`자산 스냅샷 ${snapshotRows.length}건 로드 완료`)
+          }
+        } catch (snapshotError) {
+          console.error("스냅샷 로드 실패:", snapshotError)
+        }
       } catch (error) {
         console.error(error)
         setSyncStatus("Supabase 점검 실패 (테이블/데이터 확인 필요)")
@@ -1536,6 +1812,21 @@ export default function GoldenFuture() {
       ]
 
   const historyData = useMemo(() => {
+    // 스냅샷 데이터가 있으면 실제 데이터 사용
+    if (assetSnapshots.length > 0) {
+      const totalSnapshots = assetSnapshots.filter(s => s.market_type === "total")
+      return totalSnapshots.map(s => {
+        const d = new Date(s.snapshot_date)
+        return {
+          month: `${d.getMonth() + 1}월`,
+          total: s.total_value,
+          용: Math.round(s.total_value * 0.5), // 기본 50:50 분배 (실제 데이터로 대체 가능)
+          령: Math.round(s.total_value * 0.5),
+        }
+      })
+    }
+    
+    // 스냅샷 데이터가 없으면 시뮬레이션
     const d = []
     for (let i = 11; i >= 0; i--) {
       const dt = new Date()
@@ -1549,7 +1840,7 @@ export default function GoldenFuture() {
       })
     }
     return d
-  }, [grandTotal])
+  }, [grandTotal, assetSnapshots])
 
   const handleSaveToSupabase = async () => {
     if (!hasSupabaseConfig) {
@@ -1959,6 +2250,47 @@ export default function GoldenFuture() {
             </div>
           </div>
 
+          {/* 자산 변화 미니 차트 */}
+          {assetSnapshots.length > 0 && (
+            <div style={{ ...S.card, padding: 20, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: S.textMuted, marginBottom: 2 }}>📈 자산 변화 (2025.10 ~ 현재)</div>
+                  <div style={{ fontSize: 11, color: S.textMuted }}>
+                    초기 5천만원 → 현재 {fmt(grandTotal)}원
+                  </div>
+                </div>
+                <div style={{ 
+                  ...S.inset, padding: "4px 10px", 
+                  fontSize: 13, fontWeight: 700, 
+                  color: grandTotal >= 50000000 ? S.profit : S.loss,
+                  fontFamily: "'JetBrains Mono',monospace"
+                }}>
+                  {grandTotal >= 50000000 ? "+" : ""}{((grandTotal - 50000000) / 50000000 * 100).toFixed(1)}%
+                </div>
+              </div>
+              <div style={{ ...S.inset, padding: "12px 8px 4px", height: 100 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={historyData}>
+                    <defs>
+                      <linearGradient id="dashboardGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={S.accent} stopOpacity={0.25} />
+                        <stop offset="100%" stopColor={S.accent} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="month" tick={{ fill: S.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} />
+                    <YAxis hide domain={["dataMin * 0.9", "dataMax * 1.1"]} />
+                    <Tooltip 
+                      contentStyle={{ ...S.glass, background: "#f5f6fa", fontSize: 11, color: S.textPrimary }} 
+                      formatter={(v) => [fmt(v) + "원", "총자산"]}
+                    />
+                    <Area type="monotone" dataKey="total" stroke={S.accent} strokeWidth={2} fill="url(#dashboardGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
           {/* 용 & 령 Summary */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
             {[["용", "🐉", "#8b7355"], ["령", "🐲", "#6b83a8"]].map(([name, emoji, color]) => {
@@ -2257,9 +2589,20 @@ export default function GoldenFuture() {
       {/* ═══════════ INSIGHTS TAB ═══════════ */}
       {tab === "insights" && (
         <div>
+          {/* Asset History Chart - 자산 변화 추이 */}
+          <div style={{ marginBottom: 16 }}>
+            <AssetHistoryChart 
+              snapshots={assetSnapshots}
+              timeRange={historyTimeRange}
+              onTimeRangeChange={setHistoryTimeRange}
+              grandTotal={grandTotal}
+              initialInvestment={50000000}
+            />
+          </div>
+
           {/* Weekly Review */}
           <div style={{ marginBottom: 16 }}>
-            <WeeklyReview evaluated={evaluated} grandTotal={grandTotal} />
+            <WeeklyReview evaluated={evaluated} grandTotal={grandTotal} snapshots={assetSnapshots} />
           </div>
 
           {/* Top Performers */}
